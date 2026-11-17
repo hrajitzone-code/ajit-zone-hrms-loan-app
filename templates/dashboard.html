@@ -1,0 +1,361 @@
+{% extends 'base.html' %}
+
+{% block title %}Dashboard{% endblock %}
+
+{% block content %}
+
+{% if view_type == 'employee' %}
+<!-- ==================================================== -->
+<!-- 1. EMPLOYEE ROLE DASHBOARD VIEW                      -->
+<!-- ==================================================== -->
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <div>
+        <h3 class="fw-bold mb-0">Employee Self-Service Dashboard</h3>
+        <p class="text-muted small">Welcome, {{ session.get('full_name') }} | {{ COMPANY_NAME }}</p>
+    </div>
+    <a href="{{ url_for('loan.create') }}" class="btn btn-brand shadow-sm">
+        <i class="fa-solid fa-plus me-1"></i> Apply New Loan
+    </a>
+</div>
+
+<div class="row g-3 mb-4">
+    <div class="col-md-4">
+        <div class="stat-card border-start border-4 border-primary">
+            <span class="stat-label">Active Loan Status</span>
+            <h4 class="stat-value text-primary fs-4">
+                {% if emp_stats.active_loan %}
+                {{ emp_stats.active_loan.loan_id }} ({{ emp_stats.active_loan.loan_status }})
+                {% else %}
+                No Active Loan
+                {% endif %}
+            </h4>
+            <small class="text-muted">Current Account</small>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="stat-card border-start border-4 border-danger">
+            <span class="stat-label">My Outstanding Balance</span>
+            <h4 class="stat-value text-danger fs-4">{{ emp_stats.outstanding | inr }}</h4>
+            <small class="text-muted">Remaining Principal</small>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="stat-card border-start border-4 border-success">
+            <span class="stat-label">Remaining EMIs</span>
+            <h4 class="stat-value text-success fs-4">{{ emp_stats.remaining_emis }} Installments</h4>
+            <small class="text-muted">Monthly EMI: {{ emp_stats.monthly_emi | inr }}</small>
+        </div>
+    </div>
+</div>
+
+<!-- My Loans List -->
+<div class="content-card mb-4">
+    <div class="card-header-flex">
+        <h5 class="card-title-main"><i class="fa-solid fa-folder-open me-2 text-primary"></i>My Loan Accounts & Applications</h5>
+    </div>
+    <div class="table-responsive">
+        <table class="table table-custom">
+            <thead>
+                <tr>
+                    <th>Loan ID</th>
+                    <th>Loan Type</th>
+                    <th>Amount (₹)</th>
+                    <th>EMI (₹)</th>
+                    <th>Tenure</th>
+                    <th>Recovered</th>
+                    <th>Outstanding</th>
+                    <th>Status</th>
+                    <th>Action</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for l in emp_stats.my_loans %}
+                <tr>
+                    <td class="fw-bold text-primary">{{ l.loan_id }}</td>
+                    <td>{{ l.loan_type }}</td>
+                    <td>{{ l.loan_amount | inr }}</td>
+                    <td>{{ l.monthly_emi | inr }}</td>
+                    <td>{{ l.tenure_months }} Months</td>
+                    <td class="text-success fw-bold">{{ l.total_recovered | inr }}</td>
+                    <td class="text-danger fw-bold">{{ l.outstanding_balance | inr }}</td>
+                    <td><span class="badge-status badge-{{ l.loan_status | lower }}">{{ l.loan_status }}</span></td>
+                    <td>
+                        <a href="{{ url_for('loan.view_loan', loan_id=l.id) }}" class="btn btn-sm btn-light border">
+                            <i class="fa-solid fa-eye"></i> View Details
+                        </a>
+                    </td>
+                </tr>
+                {% else %}
+                <tr><td colspan="9" class="text-center text-muted py-4">You have no loan accounts. Click "Apply New Loan" to submit an application.</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+{% elif view_type == 'finance' %}
+<!-- ==================================================== -->
+<!-- 2. FINANCE / PAYROLL ROLE DASHBOARD VIEW             -->
+<!-- ==================================================== -->
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <div>
+        <h3 class="fw-bold mb-0">Finance & Payroll Executive Dashboard</h3>
+        <p class="text-muted small">Monitor monthly payroll EMI deductions & salary sheet synchronization for {{ COMPANY_NAME }}</p>
+    </div>
+    <div class="d-flex gap-2">
+        <a href="{{ url_for('salary.index') }}" class="btn btn-brand">
+            <i class="fa-solid fa-sync me-1"></i> Salary Sheet Integration
+        </a>
+    </div>
+</div>
+
+<div class="row g-3 mb-4">
+    <div class="col-md-3">
+        <div class="stat-card border-start border-4 border-success">
+            <span class="stat-label">Total Principal Recovered</span>
+            <h4 class="stat-value text-success fs-4">{{ fin_stats.total_recovered_all | inr }}</h4>
+            <small class="text-muted">All Time Recoveries</small>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="stat-card border-start border-4 border-danger">
+            <span class="stat-label">Total Outstanding Balance</span>
+            <h4 class="stat-value text-danger fs-4">{{ fin_stats.total_outstanding_active | inr }}</h4>
+            <small class="text-muted">Active Principal</small>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="stat-card border-start border-4 border-primary">
+            <span class="stat-label">Current Month EMI Target</span>
+            <h4 class="stat-value text-primary fs-4">{{ fin_stats.current_month_scheduled | inr }}</h4>
+            <small class="text-muted">Payroll Deductions</small>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="stat-card border-start border-4 border-warning">
+            <span class="stat-label">Salary Sync Pending</span>
+            <h4 class="stat-value text-warning fs-4">{{ fin_stats.sync_pending_count }} Records</h4>
+            <small class="text-muted">Awaiting Payroll Push</small>
+        </div>
+    </div>
+</div>
+
+<div class="content-card">
+    <div class="card-header-flex">
+        <h5 class="card-title-main"><i class="fa-solid fa-list-check me-2 text-primary"></i>Recent Deduction Entries</h5>
+        <a href="{{ url_for('emi.management') }}" class="btn btn-sm btn-outline-primary">EMI Ledger</a>
+    </div>
+    <div class="table-responsive">
+        <table class="table table-custom">
+            <thead>
+                <tr>
+                    <th>Loan ID</th>
+                    <th>Employee Name</th>
+                    <th>EMI No</th>
+                    <th>Scheduled (₹)</th>
+                    <th>Deducted (₹)</th>
+                    <th>Deduction Date</th>
+                    <th>Status</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for d in recent_deductions %}
+                <tr>
+                    <td class="fw-bold text-primary">{{ d.loan.loan_id }}</td>
+                    <td>{{ d.loan.employee.name }}</td>
+                    <td>#{{ d.emi_no }}</td>
+                    <td>{{ d.scheduled_emi | inr }}</td>
+                    <td class="fw-bold text-success">{{ d.actual_deduction | inr }}</td>
+                    <td>{{ d.actual_deduction_date | datefmt('%d-%b-%Y') or '-' }}</td>
+                    <td><span class="badge-status badge-{{ d.status | lower }}">{{ d.status }}</span></td>
+                </tr>
+                {% else %}
+                <tr><td colspan="7" class="text-center text-muted py-3">No deduction records found.</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+{% else %}
+<!-- ==================================================== -->
+<!-- 3. HR / ADMIN / MANAGER EXECUTIVE DASHBOARD VIEW     -->
+<!-- ==================================================== -->
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <div>
+        <h3 class="fw-bold mb-0">Executive Loan & EMI Dashboard</h3>
+        <p class="text-muted small">Real-time overview for {{ COMPANY_NAME }}</p>
+    </div>
+    <div>
+        <a href="{{ url_for('loan.create') }}" class="btn btn-brand shadow-sm me-2">
+            <i class="fa-solid fa-plus me-1"></i> New Loan Application
+        </a>
+        <a href="{{ url_for('employee.import_excel') }}" class="btn btn-outline-secondary shadow-sm">
+            <i class="fa-solid fa-file-excel me-1"></i> Excel Import Wizard
+        </a>
+    </div>
+</div>
+
+<!-- Key Stat Counters Grid -->
+<div class="row g-3 mb-4">
+    <div class="col-md-4 col-lg-3">
+        <div class="stat-card">
+            <div class="d-flex justify-content-between align-items-center">
+                <div>
+                    <span class="stat-label">Active Loans</span>
+                    <h3 class="stat-value text-primary">{{ stats.active_loans }}</h3>
+                </div>
+                <div class="stat-icon-wrapper stat-icon-blue">
+                    <i class="fa-solid fa-file-contract"></i>
+                </div>
+            </div>
+            <div class="mt-2 text-muted small">
+                <span>Closed: {{ stats.closed_loans }}</span> | <span>Pending: {{ stats.pending_apps }}</span>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-md-4 col-lg-3">
+        <div class="stat-card">
+            <div class="d-flex justify-content-between align-items-center">
+                <div>
+                    <span class="stat-label">Total Loan Amount</span>
+                    <h3 class="stat-value">{{ stats.total_loan_amount | inr }}</h3>
+                </div>
+                <div class="stat-icon-wrapper stat-icon-purple">
+                    <i class="fa-solid fa-coins"></i>
+                </div>
+            </div>
+            <div class="mt-2 text-muted small">
+                <span>Total Employees: {{ stats.total_employees }}</span>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-md-4 col-lg-3">
+        <div class="stat-card">
+            <div class="d-flex justify-content-between align-items-center">
+                <div>
+                    <span class="stat-label">Total Recovered</span>
+                    <h3 class="stat-value text-success">{{ stats.total_recovered | inr }}</h3>
+                </div>
+                <div class="stat-icon-wrapper stat-icon-green">
+                    <i class="fa-solid fa-money-bill-trend-up"></i>
+                </div>
+            </div>
+            <div class="mt-2 text-muted small">
+                <span class="text-success font-weight-bold"><i class="fa-solid fa-check me-1"></i>Collected to Date</span>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-md-4 col-lg-3">
+        <div class="stat-card">
+            <div class="d-flex justify-content-between align-items-center">
+                <div>
+                    <span class="stat-label">Total Outstanding</span>
+                    <h3 class="stat-value text-danger">{{ stats.total_outstanding | inr }}</h3>
+                </div>
+                <div class="stat-icon-wrapper stat-icon-red">
+                    <i class="fa-solid fa-scale-unbalanced"></i>
+                </div>
+            </div>
+            <div class="mt-2 text-muted small">
+                <span class="text-danger font-weight-bold">Balance Principal</span>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Charts Section -->
+<div class="row g-3 mb-4">
+    <div class="col-lg-7">
+        <div class="content-card">
+            <div class="card-header-flex">
+                <h5 class="card-title-main"><i class="fa-solid fa-chart-column me-2 text-primary"></i>Monthly EMI Recovery Trend</h5>
+                <span class="badge bg-light text-dark">Last 6 Months</span>
+            </div>
+            <canvas id="monthlyChart" height="120"></canvas>
+        </div>
+    </div>
+    <div class="col-lg-5">
+        <div class="content-card">
+            <div class="card-header-flex">
+                <h5 class="card-title-main"><i class="fa-solid fa-chart-pie me-2 text-primary"></i>Department-wise Loan Allocation</h5>
+            </div>
+            <canvas id="deptChart" height="180"></canvas>
+        </div>
+    </div>
+</div>
+
+<!-- Recent Applications & Audit Log Row -->
+<div class="row g-3">
+    <div class="col-lg-7">
+        <div class="content-card">
+            <div class="card-header-flex">
+                <h5 class="card-title-main"><i class="fa-solid fa-clock-history me-2 text-primary"></i>Recent Loan Applications</h5>
+                <a href="{{ url_for('loan.index') }}" class="btn btn-sm btn-outline-primary">View All</a>
+            </div>
+            <div class="table-responsive">
+                <table class="table table-custom">
+                    <thead>
+                        <tr>
+                            <th>Loan ID</th>
+                            <th>Employee Name</th>
+                            <th>Amount</th>
+                            <th>EMI</th>
+                            <th>Status</th>
+                            <th>Action</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for loan in recent_loans %}
+                        <tr>
+                            <td class="fw-bold">{{ loan.loan_id }}</td>
+                            <td>{{ loan.employee.name }} <br/><small class="text-muted">{{ loan.employee.department }}</small></td>
+                            <td>{{ loan.loan_amount | inr }}</td>
+                            <td>{{ loan.monthly_emi | inr }}</td>
+                            <td>
+                                <span class="badge-status badge-{{ loan.loan_status | lower }}">{{ loan.loan_status }}</span>
+                            </td>
+                            <td>
+                                <a href="{{ url_for('loan.view_loan', loan_id=loan.id) }}" class="btn btn-sm btn-light">
+                                    <i class="fa-solid fa-eye"></i>
+                                </a>
+                            </td>
+                        </tr>
+                        {% else %}
+                        <tr><td colspan="6" class="text-center text-muted">No recent loan applications.</td></tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-lg-5">
+        <div class="content-card">
+            <div class="card-header-flex">
+                <h5 class="card-title-main"><i class="fa-solid fa-shield-cat me-2 text-primary"></i>Recent Audit Activity</h5>
+                <a href="{{ url_for('audit.index') }}" class="btn btn-sm btn-outline-secondary">Audit Logs</a>
+            </div>
+            <div class="list-group list-group-flush">
+                {% for log in recent_audits %}
+                <div class="list-group-item px-0 py-2 border-bottom">
+                    <div class="d-flex justify-content-between align-items-center mb-1">
+                        <span class="badge bg-secondary" style="font-size: 0.7rem;">{{ log.action }}</span>
+                        <small class="text-muted" style="font-size: 0.75rem;">{{ log.timestamp | datefmt('%d-%b %H:%M') }}</small>
+                    </div>
+                    <p class="mb-0 small font-weight-bold text-dark">{{ log.new_value }}</p>
+                    <small class="text-muted">By {{ log.user_name }} ({{ log.role }})</small>
+                </div>
+                {% else %}
+                <div class="text-muted small py-3 text-center">No recent audit logs.</div>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+</div>
+{% endif %}
+
+{% endblock %}

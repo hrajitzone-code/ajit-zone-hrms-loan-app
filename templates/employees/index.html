@@ -1,0 +1,486 @@
+{% extends 'base.html' %}
+
+{% block title %}Employee Master Directory - {{ COMPANY_NAME }}{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
+    <div>
+        <h3 class="fw-bold mb-0">Employee Master Directory</h3>
+        <p class="text-muted small">Manage company staff records for {{ COMPANY_NAME }}</p>
+    </div>
+    <div class="d-flex gap-2 flex-wrap">
+        <!-- Export Dropdown -->
+        {% if has_perm('employees', 'export') or is_superadmin() %}
+        <div class="dropdown">
+            <button class="btn btn-outline-secondary dropdown-toggle" type="button" data-bs-dropdown="dropdown" data-bs-toggle="dropdown">
+                <i class="fa-solid fa-file-export me-1"></i> Export Data
+            </button>
+            <ul class="dropdown-menu dropdown-menu-end shadow">
+                <li>
+                    <a class="dropdown-item" href="{{ url_for('employee.export_employees', format='xlsx', q=search_q, department=selected_dept, status=selected_status) }}">
+                        <i class="fa-solid fa-file-excel text-success me-2"></i> Export to Excel (.xlsx)
+                    </a>
+                </li>
+                <li>
+                    <a class="dropdown-item" href="{{ url_for('employee.export_employees', format='csv', q=search_q, department=selected_dept, status=selected_status) }}">
+                        <i class="fa-solid fa-file-csv text-primary me-2"></i> Export to CSV (.csv)
+                    </a>
+                </li>
+            </ul>
+        </div>
+        {% endif %}
+
+        {% if has_perm('employees', 'import') or is_superadmin() %}
+        <a href="{{ url_for('employee.import_excel') }}" class="btn btn-outline-success">
+            <i class="fa-solid fa-file-import me-1"></i> Import from Excel/CSV
+        </a>
+        {% endif %}
+        {% if has_perm('employees', 'add') or is_superadmin() %}
+        <button type="button" class="btn btn-brand" data-bs-toggle="modal" data-bs-target="#addEmployeeModal">
+            <i class="fa-solid fa-user-plus me-1"></i> Add Employee
+        </button>
+        {% endif %}
+    </div>
+</div>
+
+<!-- Search & Filters -->
+<div class="content-card mb-4 py-3">
+    <form method="GET" action="{{ url_for('employee.index') }}" class="row g-3 align-items-center">
+        <div class="col-md-4">
+            <div class="input-group">
+                <span class="input-group-text bg-light"><i class="fa-solid fa-magnifying-glass text-muted"></i></span>
+                <input type="text" name="q" class="form-control" placeholder="Search Employee ID, Name, Email..." value="{{ search_q }}">
+            </div>
+        </div>
+        <div class="col-md-3">
+            <select name="department" class="form-select" onchange="this.form.submit()">
+                <option value="">All Departments</option>
+                {% for dept in departments %}
+                <option value="{{ dept }}" {% if selected_dept == dept %}selected{% endif %}>{{ dept }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="col-md-3">
+            <select name="status" class="form-select" onchange="this.form.submit()">
+                <option value="">All Statuses</option>
+                <option value="Active" {% if selected_status == 'Active' %}selected{% endif %}>Active Only</option>
+                <option value="Inactive" {% if selected_status == 'Inactive' %}selected{% endif %}>Inactive Only</option>
+            </select>
+        </div>
+        <div class="col-md-2 d-flex gap-2">
+            <button type="submit" class="btn btn-primary w-100">Filter</button>
+            <a href="{{ url_for('employee.index') }}" class="btn btn-light border">Reset</a>
+        </div>
+    </form>
+</div>
+
+<!-- Bulk Action Toolbar (Appears when 1+ checkboxes are selected) -->
+{% if has_perm('employees', 'delete') or is_superadmin() %}
+<div id="bulkActionToolbar" class="alert alert-primary py-2 px-3 mb-3 d-flex justify-content-between align-items-center shadow-sm" style="display: none !important;">
+    <div class="d-flex align-items-center">
+        <i class="fa-solid fa-check-double me-2 text-primary fs-5"></i>
+        <span class="fw-bold"><span id="selectedCountBadge">0</span> employee(s) selected</span>
+        <small class="text-muted ms-3 d-none d-md-inline">(Employees with loan history will be safely archived)</small>
+    </div>
+    <div class="d-flex gap-2">
+        <button type="button" class="btn btn-sm btn-danger shadow-sm" data-bs-toggle="modal" data-bs-target="#bulkDeleteModal">
+            <i class="fa-solid fa-trash me-1"></i> Delete Selected
+        </button>
+        <button type="button" class="btn btn-sm btn-light border" onclick="clearAllSelections()">
+            Clear Selection
+        </button>
+    </div>
+</div>
+{% endif %}
+
+<!-- Employees Table -->
+<div class="content-card p-0">
+    <div class="table-responsive">
+        <table class="table table-custom mb-0" id="employeeMasterTable">
+            <thead>
+                <tr>
+                    {% if has_perm('employees', 'delete') or is_superadmin() %}
+                    <th style="width: 40px;" class="text-center">
+                        <input type="checkbox" id="selectAllCheckbox" class="form-check-input" title="Select All on this page">
+                    </th>
+                    {% endif %}
+                    <th>Emp ID</th>
+                    <th>Name</th>
+                    <th>Department</th>
+                    <th>Designation</th>
+                    <th>Current Salary</th>
+                    <th>Joining Date</th>
+                    <th>Status</th>
+                    <th>Loan History</th>
+                    <th class="text-end">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for emp in employees %}
+                {% set loans_count = emp_loans_count.get(emp.id, 0) %}
+                <tr>
+                    {% if has_perm('employees', 'delete') or is_superadmin() %}
+                    <td class="text-center">
+                        <input type="checkbox" name="selected_emp_checkbox" value="{{ emp.id }}" data-emp-id="{{ emp.emp_id }}" data-emp-name="{{ emp.name }}" class="form-check-input emp-select-box" onchange="updateBulkToolbar()">
+                    </td>
+                    {% endif %}
+                    <td class="fw-bold text-primary">{{ emp.emp_id }}</td>
+                    <td>
+                        <a href="{{ url_for('employee.detail', emp_id_pk=emp.id) }}" class="text-decoration-none fw-bold text-dark">
+                            {{ emp.name }}
+                        </a>
+                        <br/><small class="text-muted">{{ emp.email or '' }}</small>
+                    </td>
+                    <td><span class="badge bg-light text-dark border">{{ emp.department }}</span></td>
+                    <td>{{ emp.designation }}</td>
+                    <td class="fw-bold text-success">{{ emp.current_salary | inr }}</td>
+                    <td><small>{{ emp.joining_date | datefmt('%d-%b-%Y') or (emp.hiring_date | datefmt('%d-%b-%Y')) or '-' }}</small></td>
+                    <td>
+                        <span class="badge-status badge-{{ emp.status | lower }}">{{ emp.status }}</span>
+                    </td>
+                    <td>
+                        {% if loans_count > 0 %}
+                        <span class="badge bg-warning text-dark border" title="Protected: Employee has active/past loan records">
+                            <i class="fa-solid fa-shield-halved me-1 text-primary"></i>{{ loans_count }} Loan(s)
+                        </span>
+                        {% else %}
+                        <span class="badge bg-light text-muted border">No Loans</span>
+                        {% endif %}
+                    </td>
+                    <td class="text-end">
+                        <div class="btn-group btn-group-sm">
+                            <a href="{{ url_for('employee.detail', emp_id_pk=emp.id) }}" class="btn btn-light border" title="View Detail">
+                                <i class="fa-solid fa-eye text-primary"></i>
+                            </a>
+                            
+                            {% if has_perm('employees', 'edit') or is_superadmin() %}
+                            <button type="button" class="btn btn-light border" data-bs-toggle="modal" data-bs-target="#editEmpModal{{ emp.id }}" title="Edit Details">
+                                <i class="fa-solid fa-pen-to-square text-warning"></i>
+                            </button>
+
+                            <form method="POST" action="{{ url_for('employee.toggle_status', emp_id_pk=emp.id) }}" class="d-inline">
+                                <button type="submit" class="btn btn-light border text-{{ 'danger' if emp.status == 'Active' else 'success' }}" title="Toggle Active/Inactive">
+                                    <i class="fa-solid fa-power-off"></i>
+                                </button>
+                            </form>
+                            {% endif %}
+
+                            {% if has_perm('employees', 'delete') or is_superadmin() %}
+                            <!-- Delete Button -->
+                            <button type="button" class="btn btn-light border text-danger" data-bs-toggle="modal" data-bs-target="#deleteEmpModal{{ emp.id }}" title="Delete Employee">
+                                <i class="fa-solid fa-trash"></i>
+                            </button>
+                            {% endif %}
+                        </div>
+                    </td>
+                </tr>
+
+                {% if has_perm('employees', 'edit') or is_superadmin() %}
+                <!-- Modal: Edit Employee -->
+                <div class="modal fade" id="editEmpModal{{ emp.id }}" tabindex="-1">
+                    <div class="modal-dialog modal-lg">
+                        <div class="modal-content text-start">
+                            <form method="POST" action="{{ url_for('employee.edit_employee', emp_id_pk=emp.id) }}">
+                                <div class="modal-header">
+                                    <h5 class="modal-title fw-bold"><i class="fa-solid fa-user-pen me-2 text-warning"></i>Edit Employee: {{ emp.name }} ({{ emp.emp_id }})</h5>
+                                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                                </div>
+                                <div class="modal-body row g-3">
+                                    <div class="col-md-4">
+                                        <label class="form-label fw-bold">Employee ID</label>
+                                        <input type="text" class="form-control bg-light" value="{{ emp.emp_id }}" readonly>
+                                    </div>
+                                    <div class="col-md-8">
+                                        <label class="form-label fw-bold">Full Name <span class="text-danger">*</span></label>
+                                        <input type="text" name="name" class="form-control" value="{{ emp.name }}" required>
+                                    </div>
+                                    <div class="col-md-4">
+                                        <label class="form-label fw-bold">Department</label>
+                                        <input type="text" name="department" class="form-control" value="{{ emp.department }}">
+                                    </div>
+                                    <div class="col-md-4">
+                                        <label class="form-label fw-bold">Designation</label>
+                                        <input type="text" name="designation" class="form-control" value="{{ emp.designation }}">
+                                    </div>
+                                    <div class="col-md-4">
+                                        <label class="form-label fw-bold">Current Salary (₹)</label>
+                                        <input type="number" step="0.01" name="current_salary" class="form-control fw-bold text-success" value="{{ emp.current_salary }}">
+                                    </div>
+                                    <div class="col-md-4">
+                                        <label class="form-label fw-bold">Joining Date</label>
+                                        <input type="date" name="joining_date" class="form-control" value="{{ emp.joining_date or emp.hiring_date }}">
+                                    </div>
+                                    <div class="col-md-4">
+                                        <label class="form-label">Email Address</label>
+                                        <input type="email" name="email" class="form-control" value="{{ emp.email or '' }}">
+                                    </div>
+                                    <div class="col-md-4">
+                                        <label class="form-label">Cell Phone</label>
+                                        <input type="text" name="phone" class="form-control" value="{{ emp.phone or '' }}">
+                                    </div>
+                                    <div class="col-md-4">
+                                        <label class="form-label">PAN Number</label>
+                                        <input type="text" name="pan_number" class="form-control" value="{{ emp.pan_number or '' }}">
+                                    </div>
+                                    <div class="col-md-4">
+                                        <label class="form-label">Aadhar Number</label>
+                                        <input type="text" name="aadhar_number" class="form-control" value="{{ emp.aadhar_number or '' }}">
+                                    </div>
+                                    <div class="col-md-4">
+                                        <label class="form-label">Bank Name</label>
+                                        <input type="text" name="bank_name" class="form-control" value="{{ emp.bank_name or '' }}">
+                                    </div>
+                                    <div class="col-md-6">
+                                        <label class="form-label">Bank Account No.</label>
+                                        <input type="text" name="bank_account_no" class="form-control" value="{{ emp.bank_account_no or '' }}">
+                                    </div>
+                                    <div class="col-md-6">
+                                        <label class="form-label">IFSC Code</label>
+                                        <input type="text" name="ifsc_code" class="form-control" value="{{ emp.ifsc_code or '' }}">
+                                    </div>
+                                </div>
+                                <div class="modal-footer">
+                                    <button type="button" class="btn btn-light" data-bs-dismiss="modal">Cancel</button>
+                                    <button type="submit" class="btn btn-warning">Save Changes</button>
+                                </div>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Modal: Single Employee Delete Confirmation -->
+                <div class="modal fade" id="deleteEmpModal{{ emp.id }}" tabindex="-1">
+                    <div class="modal-dialog">
+                        <div class="modal-content text-start">
+                            <form method="POST" action="{{ url_for('employee.delete_employee', emp_id_pk=emp.id) }}">
+                                <div class="modal-header bg-light">
+                                    <h5 class="modal-title fw-bold text-danger">
+                                        <i class="fa-solid fa-triangle-exclamation me-2"></i>Confirm Employee Deletion
+                                    </h5>
+                                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                                </div>
+                                <div class="modal-body">
+                                    <p class="mb-3">Are you sure you want to delete employee <strong>{{ emp.name }} ({{ emp.emp_id }})</strong>?</p>
+                                    
+                                    {% if loans_count > 0 %}
+                                    <div class="alert alert-warning border mb-3">
+                                        <h6 class="fw-bold mb-1"><i class="fa-solid fa-shield-halved me-1 text-primary"></i>Financial History Protection Active</h6>
+                                        <p class="small mb-0">
+                                            This employee has <strong>{{ loans_count }} loan record(s)</strong>. In compliance with financial audit rules, <strong>permanent deletion is blocked</strong>. Instead, the employee will be safely <strong>Archived & Deactivated</strong> to preserve all EMI records and balances.
+                                        </p>
+                                    </div>
+                                    {% else %}
+                                    <div class="alert alert-info border mb-3">
+                                        <small class="mb-0">
+                                            <i class="fa-solid fa-circle-info me-1"></i> This employee has <strong>no loan history</strong>. They will be permanently removed from the master directory.
+                                        </small>
+                                    </div>
+                                    {% endif %}
+
+                                    <div class="mb-3">
+                                        <label class="form-label small fw-bold">Reason for Action (Recorded in Audit Log)</label>
+                                        <input type="text" name="delete_reason" class="form-control" placeholder="e.g. Resigned, duplicate entry, retired..." required>
+                                    </div>
+                                </div>
+                                <div class="modal-footer">
+                                    <button type="button" class="btn btn-light" data-bs-dismiss="modal">Cancel</button>
+                                    <button type="submit" class="btn btn-danger">
+                                        {% if loans_count > 0 %}
+                                        <i class="fa-solid fa-box-archive me-1"></i> Archive / Deactivate Employee
+                                        {% else %}
+                                        <i class="fa-solid fa-trash me-1"></i> Permanently Delete
+                                        {% endif %}
+                                    </button>
+                                </div>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+                {% endif %}
+
+                {% else %}
+                <tr>
+                    <td colspan="10" class="text-center text-muted py-4">No employee records found matching criteria.</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    <!-- Pagination -->
+    {% if pagination and pagination.pages > 1 %}
+    <div class="p-3 border-top d-flex justify-content-between align-items-center">
+        <small class="text-muted">Showing Page {{ pagination.page }} of {{ pagination.pages }}</small>
+        <ul class="pagination pagination-sm mb-0">
+            <li class="page-item {% if not pagination.has_prev %}disabled{% endif %}">
+                <a class="page-link" href="{{ url_for('employee.index', page=pagination.prev_num, q=search_q, department=selected_dept, status=selected_status) }}">Previous</a>
+            </li>
+            <li class="page-item {% if not pagination.has_next %}disabled{% endif %}">
+                <a class="page-link" href="{{ url_for('employee.index', page=pagination.next_num, q=search_q, department=selected_dept, status=selected_status) }}">Next</a>
+            </li>
+        </ul>
+    </div>
+    {% endif %}
+</div>
+
+<!-- Modal: Add Employee -->
+<div class="modal fade" id="addEmployeeModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <form method="POST" action="{{ url_for('employee.add_employee') }}">
+                <div class="modal-header">
+                    <h5 class="modal-title fw-bold"><i class="fa-solid fa-user-plus me-2 text-primary"></i>Add New Employee</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body row g-3">
+                    <div class="col-md-4">
+                        <label class="form-label fw-bold">Employee ID <span class="text-danger">*</span></label>
+                        <input type="text" name="emp_id" class="form-control" placeholder="e.g. EMP0001" required>
+                    </div>
+                    <div class="col-md-8">
+                        <label class="form-label fw-bold">Full Name <span class="text-danger">*</span></label>
+                        <input type="text" name="name" class="form-control" placeholder="Enter Full Name" required>
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label fw-bold">Department</label>
+                        <input type="text" name="department" class="form-control" placeholder="e.g. Finance, Sales">
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label fw-bold">Designation</label>
+                        <input type="text" name="designation" class="form-control" placeholder="e.g. Manager">
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label fw-bold">Current Monthly Salary (₹)</label>
+                        <input type="number" step="0.01" name="current_salary" class="form-control" placeholder="50000">
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label fw-bold">Joining Date</label>
+                        <input type="date" name="joining_date" class="form-control">
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label">Email Address</label>
+                        <input type="email" name="email" class="form-control" placeholder="name@ajitzone.com">
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label">Cell Phone</label>
+                        <input type="text" name="phone" class="form-control" placeholder="+91 9876543210">
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-light" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-brand">Save Employee</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Modal: Bulk Delete Confirmation -->
+<div class="modal fade" id="bulkDeleteModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <form method="POST" action="{{ url_for('employee.bulk_delete') }}" id="bulkDeleteForm">
+                <div class="modal-header bg-light">
+                    <h5 class="modal-title fw-bold text-danger">
+                        <i class="fa-solid fa-triangle-exclamation me-2"></i>Confirm Bulk Employee Deletion
+                    </h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <p class="mb-2">You are about to delete <strong id="modalBulkCount">0</strong> selected employee(s).</p>
+                    
+                    <div class="alert alert-warning border mb-3">
+                        <h6 class="fw-bold mb-1"><i class="fa-solid fa-shield-halved me-1 text-primary"></i>Financial Safety Rule Enforced:</h6>
+                        <ul class="mb-0 small ps-3">
+                            <li>Employees with <strong>no loan history</strong> will be permanently deleted.</li>
+                            <li>Employees with <strong>active or past loan/EMI records</strong> will be <strong>Archived & Deactivated</strong> instead of deleted to protect financial data.</li>
+                        </ul>
+                    </div>
+
+                    <div id="bulkSelectedListPreview" class="p-2 bg-light border rounded mb-3 small" style="max-height: 120px; overflow-y: auto;">
+                        <!-- Injected via JS -->
+                    </div>
+
+                    <!-- Hidden inputs container for selected IDs -->
+                    <div id="bulkDeleteInputsContainer"></div>
+
+                    <div class="mb-3">
+                        <label class="form-label small fw-bold">Reason for Bulk Deletion (Required for Audit Log) <span class="text-danger">*</span></label>
+                        <input type="text" name="bulk_delete_reason" class="form-control" placeholder="e.g. Annual staff audit, bulk cleanup..." required>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-light" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-danger">
+                        <i class="fa-solid fa-trash me-1"></i> Confirm & Proceed
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- JavaScript for Selective Selection & Bulk Actions -->
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const selectAll = document.getElementById('selectAllCheckbox');
+    if (selectAll) {
+        selectAll.addEventListener('change', function() {
+            const checkboxes = document.querySelectorAll('.emp-select-box');
+            checkboxes.forEach(cb => cb.checked = selectAll.checked);
+            updateBulkToolbar();
+        });
+    }
+});
+
+function updateBulkToolbar() {
+    const checked = document.querySelectorAll('.emp-select-box:checked');
+    const toolbar = document.getElementById('bulkActionToolbar');
+    const badge = document.getElementById('selectedCountBadge');
+    const modalCount = document.getElementById('modalBulkCount');
+    const inputsContainer = document.getElementById('bulkDeleteInputsContainer');
+    const previewList = document.getElementById('bulkSelectedListPreview');
+
+    if (!toolbar) return;
+
+    if (checked.length > 0) {
+        toolbar.style.setProperty('display', 'flex', 'important');
+        badge.innerText = checked.length;
+        if (modalCount) modalCount.innerText = checked.length;
+
+        // Build hidden inputs for bulk form
+        if (inputsContainer) {
+            inputsContainer.innerHTML = '';
+            let namesList = [];
+            checked.forEach(cb => {
+                const hiddenInput = document.createElement('input');
+                hiddenInput.type = 'hidden';
+                hiddenInput.name = 'selected_emp_ids';
+                hiddenInput.value = cb.value;
+                inputsContainer.appendChild(hiddenInput);
+
+                const empId = cb.getAttribute('data-emp-id');
+                const empName = cb.getAttribute('data-emp-name');
+                namesList.push(`• <strong>${empId}</strong> - ${empName}`);
+            });
+            if (previewList) {
+                previewList.innerHTML = namesList.join('<br/>');
+            }
+        }
+    } else {
+        toolbar.style.setProperty('display', 'none', 'important');
+        if (inputsContainer) inputsContainer.innerHTML = '';
+        const selectAll = document.getElementById('selectAllCheckbox');
+        if (selectAll) selectAll.checked = false;
+    }
+}
+
+function clearAllSelections() {
+    const checkboxes = document.querySelectorAll('.emp-select-box');
+    checkboxes.forEach(cb => cb.checked = false);
+    const selectAll = document.getElementById('selectAllCheckbox');
+    if (selectAll) selectAll.checked = false;
+    updateBulkToolbar();
+}
+</script>
+{% endblock %}

@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}{{ COMPANY_NAME }}{% endblock %} - Employee Loan & EMI Management</title>
+    <!-- Bootstrap 5 CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <!-- FontAwesome Icons -->
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+    <!-- Custom CSS -->
+    <link href="{{ url_for('static', filename='css/custom.css') }}" rel="stylesheet">
+    {% block extra_css %}{% endblock %}
+</head>
+<body>
+    {% if session.get('user_id') %}
+    <!-- Navbar Header -->
+    <nav class="navbar navbar-expand-lg bg-brand-header navbar-dark sticky-top">
+        <div class="container-fluid px-3">
+            <a class="navbar-brand d-flex align-items-center" href="{{ url_for('dashboard.index') }}">
+                <i class="fa-solid fa-building-columns text-primary me-2 fs-4"></i>
+                <span class="navbar-brand-title">{{ COMPANY_NAME }}</span>
+            </a>
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarMain">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+            
+            <div class="collapse navbar-collapse" id="navbarMain">
+                <ul class="navbar-nav ms-auto align-items-center">
+                    <li class="nav-item me-3 text-light">
+                        <small class="text-muted"><i class="fa-regular fa-calendar-check me-1"></i>System Date:</small>
+                        <span class="badge bg-secondary">2026-09-02</span>
+                    </li>
+                    <li class="nav-item dropdown">
+                        <a class="nav-link dropdown-toggle d-flex align-items-center text-white" href="#" id="userDropdown" role="button" data-bs-toggle="dropdown">
+                            <div class="bg-primary text-white rounded-circle d-flex align-items-center justify-content-center me-2" style="width: 32px; height: 32px; font-weight: 600;">
+                                {{ session.get('full_name', 'U')[0] }}
+                            </div>
+                            <span>{{ session.get('full_name') }}</span>
+                            <span class="badge bg-info ms-2 text-dark">{{ session.get('user_role') }}</span>
+                        </a>
+                        <ul class="dropdown-menu dropdown-menu-end shadow">
+                            <li><span class="dropdown-item-text text-muted">Role: {{ session.get('user_role') }}</span></li>
+                            <li><hr class="dropdown-divider"></li>
+                            <li><a class="dropdown-item text-danger" href="{{ url_for('auth.logout') }}"><i class="fa-solid fa-right-from-bracket me-2"></i>Logout</a></li>
+                        </ul>
+                    </li>
+                </ul>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container-fluid">
+        <div class="row">
+            <!-- Sidebar Navigation -->
+            <nav class="col-md-3 col-lg-2 d-md-block main-sidebar collapse">
+                <div class="position-sticky">
+                    <ul class="nav flex-column">
+                        {% if has_perm('dashboard', 'view_all') or is_superadmin() %}
+                        <li class="nav-item">
+                            <a class="nav-link {% if request.endpoint == 'dashboard.index' %}active{% endif %}" href="{{ url_for('dashboard.index') }}">
+                                <i class="fa-solid fa-chart-line"></i> Dashboard
+                            </a>
+                        </li>
+                        {% endif %}
+
+                        {% if has_perm('employees', 'view_all') or has_perm('employees', 'view_own') or is_superadmin() %}
+                        <li class="nav-item">
+                            <a class="nav-link {% if 'employee' in request.endpoint %}active{% endif %}" href="{{ url_for('employee.index') }}">
+                                <i class="fa-solid fa-users"></i> Employee Master
+                            </a>
+                        </li>
+                        {% endif %}
+
+                        {% if has_perm('loan_applications', 'view_all') or has_perm('loan_applications', 'view_own') or has_perm('loan_applications', 'add') or is_superadmin() %}
+                        <li class="nav-item">
+                            <a class="nav-link {% if 'loan' in request.endpoint %}active{% endif %}" href="{{ url_for('loan.index') }}">
+                                <i class="fa-solid fa-hand-holding-dollar"></i> Loan Applications
+                            </a>
+                        </li>
+                        {% endif %}
+
+                        {% if has_perm('emi', 'view_all') or has_perm('emi', 'view_own') or is_superadmin() %}
+                        <li class="nav-item">
+                            <a class="nav-link {% if 'emi.management' in request.endpoint %}active{% endif %}" href="{{ url_for('emi.management') }}">
+                                <i class="fa-solid fa-calendar-days"></i> EMI Ledger & Management
+                            </a>
+                        </li>
+                        {% endif %}
+
+                        {% if has_perm('adjustments', 'view_all') or has_perm('adjustments', 'view_own') or is_superadmin() %}
+                        <li class="nav-item">
+                            <a class="nav-link {% if 'emi.adjustments' in request.endpoint %}active{% endif %}" href="{{ url_for('emi.adjustments') }}">
+                                <i class="fa-solid fa-sliders"></i> Missed EMI & Adjustments
+                            </a>
+                        </li>
+                        {% endif %}
+
+                        {% if has_perm('salary', 'view_all') or is_superadmin() %}
+                        <li class="nav-item">
+                            <a class="nav-link {% if 'salary' in request.endpoint %}active{% endif %}" href="{{ url_for('salary.index') }}">
+                                <i class="fa-solid fa-calculator"></i> Salary Integration
+                            </a>
+                        </li>
+                        {% endif %}
+
+                        {% if has_perm('reports', 'view_all') or has_perm('reports', 'view_own') or is_superadmin() %}
+                        <li class="nav-item">
+                            <a class="nav-link {% if 'reports' in request.endpoint %}active{% endif %}" href="{{ url_for('reports.index') }}">
+                                <i class="fa-solid fa-file-invoice"></i> Reports Center
+                            </a>
+                        </li>
+                        {% endif %}
+
+                        {% if has_perm('user_mgmt', 'view_all') or is_superadmin() %}
+                        <li class="nav-item">
+                            <a class="nav-link {% if 'user_mgmt' in request.endpoint %}active{% endif %}" href="{{ url_for('user_mgmt.index') }}">
+                                <i class="fa-solid fa-users-gear"></i> User Management & RBAC
+                            </a>
+                        </li>
+                        {% endif %}
+
+                        {% if has_perm('audit_logs', 'view_all') or is_superadmin() %}
+                        <li class="nav-item">
+                            <a class="nav-link {% if 'audit' in request.endpoint %}active{% endif %}" href="{{ url_for('audit.index') }}">
+                                <i class="fa-solid fa-shield-halved"></i> Audit Logs
+                            </a>
+                        </li>
+                        {% endif %}
+
+                        {% if has_perm('settings', 'view_all') or has_perm('settings', 'manage') or is_superadmin() %}
+                        <li class="nav-item">
+                            <a class="nav-link {% if 'settings' in request.endpoint %}active{% endif %}" href="{{ url_for('settings.index') }}">
+                                <i class="fa-solid fa-gears"></i> System Settings
+                            </a>
+                        </li>
+                        {% endif %}
+                    </ul>
+                </div>
+            </nav>
+
+            <!-- Main Content Area -->
+            <main class="col-md-9 ms-sm-auto col-lg-10 px-md-4 py-4">
+                {% with messages = get_flashed_messages(with_categories=true) %}
+                {% if messages %}
+                    {% for category, message in messages %}
+                        <div class="alert alert-{{ category }} alert-dismissible fade show shadow-sm mb-4" role="alert">
+                            {{ message }}
+                            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                        </div>
+                    {% endfor %}
+                {% endif %}
+                {% endwith %}
+
+                {% block content %}{% endblock %}
+            </main>
+        </div>
+    </div>
+    {% else %}
+        {% block login_content %}{% endblock %}
+    {% endif %}
+
+    <!-- Scripts -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="{{ url_for('static', filename='js/app.js') }}"></script>
+    {% block extra_js %}{% endblock %}
+</body>
+</html>

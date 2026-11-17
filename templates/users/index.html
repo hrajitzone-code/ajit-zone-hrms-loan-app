@@ -1,0 +1,954 @@
+{% extends 'base.html' %}
+
+{% block title %}User Management & RBAC - {{ COMPANY_NAME }}{% endblock %}
+
+{% block extra_css %}
+<style>
+.perm-matrix-table th {
+    font-size: 0.78rem;
+    text-align: center;
+    vertical-align: middle;
+}
+.perm-matrix-table td {
+    vertical-align: middle;
+    font-size: 0.85rem;
+}
+.perm-checkbox {
+    width: 1.15rem;
+    height: 1.15rem;
+    cursor: pointer;
+}
+.superadmin-badge {
+    background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
+    color: #fff;
+    font-weight: 700;
+    box-shadow: 0 2px 4px rgba(217, 119, 6, 0.3);
+}
+.role-pill {
+    font-size: 0.78rem;
+    font-weight: 600;
+    padding: 0.25rem 0.6rem;
+    border-radius: 20px;
+}
+.nav-tabs .nav-link {
+    font-weight: 600;
+    color: #475569;
+    border: none;
+    border-bottom: 3px solid transparent;
+    padding: 0.75rem 1.25rem;
+}
+.nav-tabs .nav-link.active {
+    color: #2563eb;
+    border-bottom: 3px solid #2563eb;
+    background: transparent;
+}
+.action-chip {
+    display: inline-block;
+    padding: 0.15rem 0.45rem;
+    font-size: 0.68rem;
+    border-radius: 4px;
+    margin: 1px;
+    font-weight: 600;
+}
+</style>
+{% endblock %}
+
+{% block content %}
+<!-- Top Header & Primary Super Admin Indicator -->
+<div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
+    <div>
+        <div class="d-flex align-items-center gap-2 mb-1">
+            <h3 class="fw-bold mb-0">Custom RBAC & User Management</h3>
+            <span class="badge superadmin-badge py-1 px-2">
+                <i class="fa-solid fa-crown me-1 text-warning"></i>Primary Super Admin: Sakshi Shukla
+            </span>
+        </div>
+        <p class="text-muted small mb-0">Configure module-level granular permissions, user accounts, role definitions, and access logs for {{ COMPANY_NAME }}</p>
+    </div>
+    <div class="d-flex gap-2">
+        <button type="button" class="btn btn-brand" data-bs-toggle="modal" data-bs-target="#createUserModal">
+            <i class="fa-solid fa-user-plus me-1"></i> Create New User ID
+        </button>
+    </div>
+</div>
+
+<!-- RBAC Security Banner -->
+<div class="alert alert-primary bg-light border-primary d-flex align-items-center gap-3 py-2 px-3 mb-4 rounded-3 shadow-sm">
+    <div class="fs-3 text-primary"><i class="fa-solid fa-shield-halved"></i></div>
+    <div class="small">
+        <strong>Enterprise RBAC Activated:</strong> Access rights are enforced in real-time on both client and server routes.
+        <strong>Sakshi Shukla</strong> is permanently assigned as Primary Super Admin with full access. Quick demo logins have been completely removed.
+    </div>
+</div>
+
+<!-- Tabs Navigation -->
+<ul class="nav nav-tabs mb-4" id="rbacTabs" role="tablist">
+    <li class="nav-item" role="presentation">
+        <button class="nav-link {% if active_tab == 'users' %}active{% endif %}" id="users-tab" data-bs-toggle="tab" data-bs-target="#users-pane" type="button" role="tab">
+            <i class="fa-solid fa-users me-1"></i> Users Directory & Accounts ({{ users | length }})
+        </button>
+    </li>
+    <li class="nav-item" role="presentation">
+        <button class="nav-link {% if active_tab == 'matrix' %}active{% endif %}" id="matrix-tab" data-bs-toggle="tab" data-bs-target="#matrix-pane" type="button" role="tab">
+            <i class="fa-solid fa-table-cells me-1"></i> Module Permission Matrix Editor
+        </button>
+    </li>
+    <li class="nav-item" role="presentation">
+        <button class="nav-link {% if active_tab == 'overview' %}active{% endif %}" id="overview-tab" data-bs-toggle="tab" data-bs-target="#overview-pane" type="button" role="tab">
+            <i class="fa-solid fa-network-wired me-1"></i> Access Matrix Overview (All Users)
+        </button>
+    </li>
+    <li class="nav-item" role="presentation">
+        <button class="nav-link {% if active_tab == 'activity' %}active{% endif %}" id="activity-tab" data-bs-toggle="tab" data-bs-target="#activity-pane" type="button" role="tab">
+            <i class="fa-solid fa-clock-rotate-left me-1"></i> Login & Security Audit Trail
+        </button>
+    </li>
+</ul>
+
+<div class="tab-content" id="rbacTabsContent">
+    <!-- TAB 1: USERS DIRECTORY -->
+    <div class="tab-pane fade {% if active_tab == 'users' %}show active{% endif %}" id="users-pane" role="tabpanel">
+        <!-- Search & Filter Card -->
+        <div class="content-card mb-4 py-3">
+            <form method="GET" action="{{ url_for('user_mgmt.index') }}" class="row g-3 align-items-center">
+                <input type="hidden" name="tab" value="users">
+                <div class="col-md-5">
+                    <div class="input-group">
+                        <span class="input-group-text bg-light"><i class="fa-solid fa-magnifying-glass text-muted"></i></span>
+                        <input type="text" name="q" class="form-control" placeholder="Search User ID, Name, Email..." value="{{ search_q }}">
+                    </div>
+                </div>
+                <div class="col-md-4">
+                    <select name="role" class="form-select" onchange="this.form.submit()">
+                        <option value="">All Roles</option>
+                        {% for r in roles %}
+                        <option value="{{ r }}" {% if selected_role == r %}selected{% endif %}>{{ r.replace('_', ' ') }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-md-3 d-flex gap-2">
+                    <button type="submit" class="btn btn-primary w-100">Filter</button>
+                    <a href="{{ url_for('user_mgmt.index', tab='users') }}" class="btn btn-light border">Reset</a>
+                </div>
+            </form>
+        </div>
+
+        <!-- Users Table -->
+        <div class="content-card p-0">
+            <div class="table-responsive">
+                <table class="table table-custom mb-0">
+                    <thead>
+                        <tr>
+                            <th>User ID / Username</th>
+                            <th>Full Name & Email</th>
+                            <th>Role</th>
+                            <th>Linked Employee</th>
+                            <th>Permission Profile</th>
+                            <th>Status</th>
+                            <th class="text-end">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for u in users %}
+                        <tr>
+                            <td>
+                                <div class="d-flex align-items-center gap-1">
+                                    <span class="fw-bold text-primary">{{ u.username }}</span>
+                                    {% if u.is_primary_superadmin or u.username == 'sakshi' %}
+                                    <span class="badge bg-warning text-dark border ms-1" title="Primary Super Admin (Protected Account)">
+                                        <i class="fa-solid fa-lock text-danger me-1"></i>Primary SA
+                                    </span>
+                                    {% endif %}
+                                </div>
+                                <small class="text-muted">ID: #{{ u.id }}</small>
+                            </td>
+                            <td>
+                                <div class="fw-bold text-dark">{{ u.full_name }}</div>
+                                <small class="text-muted">{{ u.email or 'No email recorded' }}</small>
+                            </td>
+                            <td>
+                                {% if u.role == 'Super_Admin' %}
+                                <span class="badge bg-dark text-warning border border-warning fs-6">
+                                    <i class="fa-solid fa-crown me-1"></i>Super Admin
+                                </span>
+                                {% elif u.role == 'HR_Manager' %}
+                                <span class="badge bg-primary fs-6">HR Manager</span>
+                                {% elif u.role == 'HR' %}
+                                <span class="badge bg-info text-dark fs-6">HR Executive</span>
+                                {% elif u.role == 'Finance_Payroll' %}
+                                <span class="badge bg-success fs-6">Finance & Payroll</span>
+                                {% elif u.role == 'Employee' %}
+                                <span class="badge bg-secondary fs-6">Employee (Self-Service)</span>
+                                {% else %}
+                                <span class="badge bg-light text-dark border fs-6">{{ u.role }}</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                {% if u.employee %}
+                                <span class="badge bg-light text-dark border" title="Linked to Employee Master">
+                                    <i class="fa-solid fa-id-badge me-1 text-primary"></i>{{ u.employee.emp_id }} - {{ u.employee.name }}
+                                </span>
+                                {% else %}
+                                <span class="text-muted small">None (System Admin User)</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                {% if u.is_superadmin() %}
+                                <span class="badge bg-success-subtle text-success border border-success">
+                                    <i class="fa-solid fa-check-double me-1"></i>Full Access (12 Modules)
+                                </span>
+                                {% elif u.permissions %}
+                                <span class="badge bg-primary-subtle text-primary border border-primary">
+                                    <i class="fa-solid fa-sliders me-1"></i>Custom Matrix Configured
+                                </span>
+                                {% else %}
+                                <span class="badge bg-secondary-subtle text-secondary border">
+                                    Standard {{ u.role.replace('_', ' ') }} Defaults
+                                </span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                <span class="badge-status badge-{{ 'active' if u.is_active else 'inactive' }}">
+                                    {{ 'Active' if u.is_active else 'Inactive' }}
+                                </span>
+                            </td>
+                            <td class="text-end">
+                                <div class="btn-group btn-group-sm">
+                                    <!-- Matrix Edit Button -->
+                                    <button type="button" class="btn btn-outline-primary" data-bs-toggle="modal" data-bs-target="#userPermModal{{ u.id }}" title="Configure Module Permissions Matrix">
+                                        <i class="fa-solid fa-table-cells me-1"></i>Permissions
+                                    </button>
+
+                                    <!-- Edit User Details -->
+                                    <button type="button" class="btn btn-light border" data-bs-toggle="modal" data-bs-target="#editUserModal{{ u.id }}" title="Edit User Details & Role">
+                                        <i class="fa-solid fa-user-gear text-secondary"></i>
+                                    </button>
+
+                                    <!-- Reset Password -->
+                                    <button type="button" class="btn btn-light border" data-bs-toggle="modal" data-bs-target="#resetPassModal{{ u.id }}" title="Reset Password">
+                                        <i class="fa-solid fa-key text-warning"></i>
+                                    </button>
+
+                                    <!-- Toggle Status Button -->
+                                    {% if not (u.is_primary_superadmin or u.username == 'sakshi') and u.id != session.get('user_id') %}
+                                    <form method="POST" action="{{ url_for('user_mgmt.toggle_status', user_id=u.id) }}" class="d-inline">
+                                        <button type="submit" class="btn btn-light border text-{{ 'danger' if u.is_active else 'success' }}" title="{{ 'Deactivate' if u.is_active else 'Activate' }} Account">
+                                            <i class="fa-solid fa-power-off"></i>
+                                        </button>
+                                    </form>
+                                    
+                                    <!-- Delete Button -->
+                                    <button type="button" class="btn btn-light border text-danger" data-bs-toggle="modal" data-bs-target="#deleteUserModal{{ u.id }}" title="Delete User">
+                                        <i class="fa-solid fa-trash"></i>
+                                    </button>
+                                    {% else %}
+                                    <button class="btn btn-light border text-muted" disabled title="Primary Super Admin account is protected against deactivation and deletion">
+                                        <i class="fa-solid fa-shield-halved"></i>
+                                    </button>
+                                    {% endif %}
+                                </div>
+                            </td>
+                        </tr>
+
+                        <!-- Modal: Configure Permissions Matrix for User -->
+                        <div class="modal fade" id="userPermModal{{ u.id }}" tabindex="-1">
+                            <div class="modal-dialog modal-xl modal-dialog-scrollable">
+                                <div class="modal-content">
+                                    <form method="POST" action="{{ url_for('user_mgmt.update_permissions', user_id=u.id) }}">
+                                        <div class="modal-header bg-light">
+                                            <div>
+                                                <h5 class="modal-title fw-bold mb-0">
+                                                    <i class="fa-solid fa-sliders me-2 text-primary"></i>Custom Permission Matrix: {{ u.username }} ({{ u.full_name }})
+                                                </h5>
+                                                <small class="text-muted">Assigned Role: <strong>{{ u.role }}</strong> | Configure granular actions per module</small>
+                                            </div>
+                                            <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                                        </div>
+                                        <div class="modal-body">
+                                            {% if u.is_primary_superadmin or u.username == 'sakshi' %}
+                                            <div class="alert alert-warning d-flex align-items-center gap-2">
+                                                <i class="fa-solid fa-crown text-warning fs-4"></i>
+                                                <div>
+                                                    <strong>Sakshi Shukla is the Primary Super Admin:</strong> This account has unrestricted access across all modules, routes, and actions. Custom restrictions cannot be applied to the primary super administrator.
+                                                </div>
+                                            </div>
+                                            {% else %}
+                                            <!-- Preset Buttons Toolbar -->
+                                            <div class="p-3 bg-light rounded-3 mb-3 border">
+                                                <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
+                                                    <span class="small fw-bold text-muted"><i class="fa-solid fa-wand-magic-sparkles me-1 text-primary"></i>Quick Permission Presets:</span>
+                                                    <div class="btn-group btn-group-sm flex-wrap">
+                                                        <button type="button" class="btn btn-outline-secondary" onclick="applyUserPreset({{ u.id }}, 'select_all')">Select All</button>
+                                                        <button type="button" class="btn btn-outline-secondary" onclick="applyUserPreset({{ u.id }}, 'clear_all')">Clear All</button>
+                                                        <button type="button" class="btn btn-outline-primary" onclick="applyUserPreset({{ u.id }}, 'hr_mgr')">HR Manager</button>
+                                                        <button type="button" class="btn btn-outline-info" onclick="applyUserPreset({{ u.id }}, 'hr_exec')">HR Executive</button>
+                                                        <button type="button" class="btn btn-outline-success" onclick="applyUserPreset({{ u.id }}, 'finance')">Finance & Payroll</button>
+                                                        <button type="button" class="btn btn-outline-secondary" onclick="applyUserPreset({{ u.id }}, 'viewer')">View Only</button>
+                                                        <button type="button" class="btn btn-outline-dark" onclick="applyUserPreset({{ u.id }}, 'employee')">Self-Service</button>
+                                                    </div>
+                                                </div>
+                                            </div>
+
+                                            {% set current_perms = user_perms_map.get(u.id, {}) %}
+                                            <!-- Permissions Matrix Table -->
+                                            <div class="table-responsive">
+                                                <table class="table table-bordered table-hover perm-matrix-table align-middle" id="userPermTable{{ u.id }}">
+                                                    <thead class="table-light">
+                                                        <tr>
+                                                            <th style="text-align: left; width: 220px;">Module Name</th>
+                                                            <th style="width: 80px;">Category</th>
+                                                            {% for act_id, act_meta in actions_meta.items() %}
+                                                            <th style="width: 75px;">
+                                                                <span class="badge {{ act_meta.badge }} text-white d-block py-1">
+                                                                    {{ act_meta.label }}
+                                                                </span>
+                                                            </th>
+                                                            {% endfor %}
+                                                            <th style="width: 80px;">Row Action</th>
+                                                        </tr>
+                                                    </thead>
+                                                    <tbody>
+                                                        {% for m in modules_def %}
+                                                        {% set mod_actions = current_perms.get(m.id, []) %}
+                                                        <tr data-mod-id="{{ m.id }}">
+                                                            <td class="text-start">
+                                                                <div class="fw-bold text-dark">{{ m.name }}</div>
+                                                                <small class="text-muted d-block" style="font-size: 0.75rem;">{{ m.description }}</small>
+                                                            </td>
+                                                            <td class="text-center">
+                                                                <span class="badge bg-light text-dark border">{{ m.category }}</span>
+                                                            </td>
+                                                            {% for act_id in actions_meta.keys() %}
+                                                            <td class="text-center">
+                                                                {% if act_id in m.actions %}
+                                                                <input type="checkbox" 
+                                                                       name="perm_{{ m.id }}" 
+                                                                       value="{{ act_id }}" 
+                                                                       class="form-check-input perm-checkbox u-{{ u.id }}-box u-{{ u.id }}-{{ m.id }}"
+                                                                       data-module="{{ m.id }}"
+                                                                       data-action="{{ act_id }}"
+                                                                       {% if act_id in mod_actions %}checked{% endif %}>
+                                                                {% else %}
+                                                                <span class="text-muted small">-</span>
+                                                                {% endif %}
+                                                            </td>
+                                                            {% endfor %}
+                                                            <td class="text-center">
+                                                                <div class="btn-group btn-group-sm">
+                                                                    <button type="button" class="btn btn-outline-secondary btn-xs py-0 px-1" title="Select all actions for this module" onclick="toggleModuleRow({{ u.id }}, '{{ m.id }}', true)">
+                                                                        <i class="fa-solid fa-check-double text-success"></i>
+                                                                    </button>
+                                                                    <button type="button" class="btn btn-outline-secondary btn-xs py-0 px-1" title="Clear module actions" onclick="toggleModuleRow({{ u.id }}, '{{ m.id }}', false)">
+                                                                        <i class="fa-solid fa-xmark text-danger"></i>
+                                                                    </button>
+                                                                </div>
+                                                            </td>
+                                                        </tr>
+                                                        {% endfor %}
+                                                    </tbody>
+                                                </table>
+                                            </div>
+                                            {% endif %}
+                                        </div>
+                                        <div class="modal-footer d-flex justify-content-between">
+                                            {% if not (u.is_primary_superadmin or u.username == 'sakshi') %}
+                                            <form method="POST" action="{{ url_for('user_mgmt.reset_permissions_to_default', user_id=u.id) }}" class="d-inline">
+                                                <button type="submit" class="btn btn-outline-secondary btn-sm" onclick="return confirm('Reset this user to standard role defaults?')">
+                                                    <i class="fa-solid fa-rotate-left me-1"></i>Reset to {{ u.role.replace('_', ' ') }} Defaults
+                                                </button>
+                                            </form>
+                                            <div>
+                                                <button type="button" class="btn btn-light" data-bs-dismiss="modal">Cancel</button>
+                                                <button type="submit" class="btn btn-primary px-4">
+                                                    <i class="fa-solid fa-floppy-disk me-1"></i>Save Custom Matrix
+                                                </button>
+                                            </div>
+                                            {% else %}
+                                            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                                            {% endif %}
+                                        </div>
+                                    </form>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Modal: Edit User Details & Role -->
+                        <div class="modal fade" id="editUserModal{{ u.id }}" tabindex="-1">
+                            <div class="modal-dialog">
+                                <div class="modal-content">
+                                    <form method="POST" action="{{ url_for('user_mgmt.edit_user', user_id=u.id) }}">
+                                        <div class="modal-header">
+                                            <h5 class="modal-title fw-bold">Edit Account: {{ u.username }}</h5>
+                                            <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                                        </div>
+                                        <div class="modal-body">
+                                            <div class="mb-3">
+                                                <label class="form-label fw-bold">Full Name <span class="text-danger">*</span></label>
+                                                <input type="text" name="full_name" class="form-control" value="{{ u.full_name }}" required>
+                                            </div>
+                                            <div class="mb-3">
+                                                <label class="form-label">Email Address</label>
+                                                <input type="email" name="email" class="form-control" value="{{ u.email or '' }}">
+                                            </div>
+                                            <div class="mb-3">
+                                                <label class="form-label fw-bold">Assign System Role</label>
+                                                {% if u.is_primary_superadmin or u.username == 'sakshi' %}
+                                                <input type="text" class="form-control bg-light" value="Super_Admin (Locked Primary Account)" readonly>
+                                                <input type="hidden" name="role" value="Super_Admin">
+                                                <small class="text-danger">Sakshi Shukla is the Primary Super Admin and cannot be demoted.</small>
+                                                {% else %}
+                                                <select name="role" class="form-select" required>
+                                                    {% for r in roles %}
+                                                    {% if r != 'Super_Admin' or session.get('is_primary_superadmin') %}
+                                                    <option value="{{ r }}" {% if u.role == r %}selected{% endif %}>{{ r.replace('_', ' ') }}</option>
+                                                    {% endif %}
+                                                    {% endfor %}
+                                                </select>
+                                                {% endif %}
+                                            </div>
+                                            <div class="mb-3">
+                                                <label class="form-label fw-bold">Link to Employee Master Record</label>
+                                                <select name="employee_id" class="form-select">
+                                                    <option value="">None (Administrative Account)</option>
+                                                    {% for emp in employees %}
+                                                    <option value="{{ emp.id }}" {% if u.employee_id == emp.id %}selected{% endif %}>
+                                                        {{ emp.emp_id }} - {{ emp.name }} ({{ emp.department }})
+                                                    </option>
+                                                    {% endfor %}
+                                                </select>
+                                            </div>
+                                        </div>
+                                        <div class="modal-footer">
+                                            <button type="button" class="btn btn-light" data-bs-dismiss="modal">Cancel</button>
+                                            <button type="submit" class="btn btn-primary">Save User Details</button>
+                                        </div>
+                                    </form>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Modal: Reset Password -->
+                        <div class="modal fade" id="resetPassModal{{ u.id }}" tabindex="-1">
+                            <div class="modal-dialog">
+                                <div class="modal-content">
+                                    <form method="POST" action="{{ url_for('user_mgmt.reset_password', user_id=u.id) }}">
+                                        <div class="modal-header">
+                                            <h5 class="modal-title fw-bold"><i class="fa-solid fa-key me-2 text-warning"></i>Reset Password: {{ u.username }}</h5>
+                                            <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                                        </div>
+                                        <div class="modal-body">
+                                            <p class="small text-muted">Enter a new secure password for <strong>{{ u.full_name }}</strong> (User ID: <code>{{ u.username }}</code>).</p>
+                                            <div class="mb-3">
+                                                <label class="form-label fw-bold">New Password <span class="text-danger">*</span></label>
+                                                <input type="password" name="new_password" class="form-control" placeholder="Enter new strong password" required minlength="4">
+                                            </div>
+                                        </div>
+                                        <div class="modal-footer">
+                                            <button type="button" class="btn btn-light" data-bs-dismiss="modal">Cancel</button>
+                                            <button type="submit" class="btn btn-warning">Set New Password</button>
+                                        </div>
+                                    </form>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Modal: Delete User -->
+                        <div class="modal fade" id="deleteUserModal{{ u.id }}" tabindex="-1">
+                            <div class="modal-dialog">
+                                <div class="modal-content">
+                                    <form method="POST" action="{{ url_for('user_mgmt.delete_user', user_id=u.id) }}">
+                                        <div class="modal-header bg-danger text-white">
+                                            <h5 class="modal-title fw-bold"><i class="fa-solid fa-triangle-exclamation me-2"></i>Delete User Account</h5>
+                                            <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                                        </div>
+                                        <div class="modal-body">
+                                            <p>Are you sure you want to permanently delete user account <strong>{{ u.username }}</strong> ({{ u.full_name }})?</p>
+                                            <div class="alert alert-danger py-2 small mb-0">
+                                                This action will delete user credentials and permissions. Any historical audit trail entries created by this user will be preserved.
+                                            </div>
+                                        </div>
+                                        <div class="modal-footer">
+                                            <button type="button" class="btn btn-light" data-bs-dismiss="modal">Cancel</button>
+                                            <button type="submit" class="btn btn-danger">Confirm Delete</button>
+                                        </div>
+                                    </form>
+                                </div>
+                            </div>
+                        </div>
+
+                        {% else %}
+                        <tr><td colspan="7" class="text-center text-muted py-4">No user accounts found matching query.</td></tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- TAB 2: INTERACTIVE PERMISSION MATRIX EDITOR -->
+    <div class="tab-pane fade {% if active_tab == 'matrix' %}show active{% endif %}" id="matrix-pane" role="tabpanel">
+        <div class="content-card mb-4 py-3">
+            <div class="row align-items-center">
+                <div class="col-md-5">
+                    <label class="form-label fw-bold mb-1"><i class="fa-solid fa-user-check me-1 text-primary"></i>Select User to Edit Permissions:</label>
+                    <select id="matrixUserSelector" class="form-select" onchange="loadUserMatrix(this.value)">
+                        <option value="">-- Choose User Account --</option>
+                        {% for u in users %}
+                        <option value="{{ u.id }}" {% if loop.first and not (u.is_primary_superadmin or u.username == 'sakshi') %}selected{% endif %}>
+                            {{ u.username }} - {{ u.full_name }} ({{ u.role }})
+                        </option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-md-7 text-md-end mt-3 mt-md-0">
+                    <span class="small fw-bold text-muted d-block mb-1">Preset Shortcuts for Selected User:</span>
+                    <div class="btn-group btn-group-sm flex-wrap">
+                        <button type="button" class="btn btn-outline-secondary" onclick="applyActivePreset('select_all')">Select All</button>
+                        <button type="button" class="btn btn-outline-secondary" onclick="applyActivePreset('clear_all')">Clear All</button>
+                        <button type="button" class="btn btn-outline-primary" onclick="applyActivePreset('hr_mgr')">HR Manager</button>
+                        <button type="button" class="btn btn-outline-info" onclick="applyActivePreset('hr_exec')">HR Executive</button>
+                        <button type="button" class="btn btn-outline-success" onclick="applyActivePreset('finance')">Finance</button>
+                        <button type="button" class="btn btn-outline-secondary" onclick="applyActivePreset('viewer')">View Only</button>
+                        <button type="button" class="btn btn-outline-dark" onclick="applyActivePreset('employee')">Self-Service</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="content-card p-0">
+            <div class="p-3 border-bottom d-flex justify-content-between align-items-center flex-wrap gap-2">
+                <div>
+                    <h5 class="fw-bold mb-0" id="matrixTargetHeading">Granular Module Permission Matrix</h5>
+                    <small class="text-muted">Configure read/write/approve/manage capabilities individually for each module</small>
+                </div>
+                <div>
+                    <button type="button" class="btn btn-brand" onclick="saveActiveMatrix()">
+                        <i class="fa-solid fa-floppy-disk me-1"></i>Save Permissions Matrix
+                    </button>
+                </div>
+            </div>
+
+            <div class="table-responsive">
+                <table class="table table-bordered table-hover perm-matrix-table align-middle mb-0" id="mainMatrixTable">
+                    <thead class="table-light">
+                        <tr>
+                            <th style="text-align: left; width: 220px;">Module Name</th>
+                            <th style="width: 90px;">Category</th>
+                            {% for act_id, act_meta in actions_meta.items() %}
+                            <th style="width: 80px;">
+                                <span class="badge {{ act_meta.badge }} text-white d-block py-1">
+                                    {{ act_meta.label }}
+                                </span>
+                            </th>
+                            {% endfor %}
+                            <th style="width: 90px;">Row Controls</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for m in modules_def %}
+                        <tr data-mod-id="{{ m.id }}">
+                            <td class="text-start">
+                                <div class="fw-bold text-dark">{{ m.name }}</div>
+                                <small class="text-muted d-block" style="font-size: 0.75rem;">{{ m.description }}</small>
+                            </td>
+                            <td class="text-center">
+                                <span class="badge bg-light text-dark border">{{ m.category }}</span>
+                            </td>
+                            {% for act_id in actions_meta.keys() %}
+                            <td class="text-center">
+                                {% if act_id in m.actions %}
+                                <input type="checkbox" 
+                                       class="form-check-input perm-checkbox active-matrix-box active-mod-{{ m.id }}" 
+                                       data-module="{{ m.id }}" 
+                                       data-action="{{ act_id }}">
+                                {% else %}
+                                <span class="text-muted small">-</span>
+                                {% endif %}
+                            </td>
+                            {% endfor %}
+                            <td class="text-center">
+                                <div class="btn-group btn-group-sm">
+                                    <button type="button" class="btn btn-outline-secondary btn-xs py-0 px-1" title="Select all actions for this module" onclick="toggleActiveRow('{{ m.id }}', true)">
+                                        <i class="fa-solid fa-check-double text-success"></i>
+                                    </button>
+                                    <button type="button" class="btn btn-outline-secondary btn-xs py-0 px-1" title="Clear module actions" onclick="toggleActiveRow('{{ m.id }}', false)">
+                                        <i class="fa-solid fa-xmark text-danger"></i>
+                                    </button>
+                                </div>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+
+            <div class="p-3 border-top text-end bg-light">
+                <button type="button" class="btn btn-brand px-4" onclick="saveActiveMatrix()">
+                    <i class="fa-solid fa-floppy-disk me-1"></i>Save Permissions Matrix
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- TAB 3: ACCESS MATRIX OVERVIEW (ALL USERS x MODULES) -->
+    <div class="tab-pane fade {% if active_tab == 'overview' %}show active{% endif %}" id="overview-pane" role="tabpanel">
+        <div class="content-card p-0">
+            <div class="p-3 border-bottom">
+                <h5 class="fw-bold mb-0"><i class="fa-solid fa-network-wired me-2 text-primary"></i>System Access Matrix Overview</h5>
+                <small class="text-muted">High-level capability view across all users and system modules</small>
+            </div>
+            <div class="table-responsive">
+                <table class="table table-bordered table-custom align-middle mb-0">
+                    <thead class="table-light">
+                        <tr>
+                            <th style="width: 180px;">User Account</th>
+                            <th style="width: 110px;">Assigned Role</th>
+                            {% for m in modules_def %}
+                            <th class="text-center" style="font-size: 0.75rem;">{{ m.name }}</th>
+                            {% endfor %}
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for u in users %}
+                        {% set u_perms = user_perms_map.get(u.id, {}) %}
+                        <tr>
+                            <td>
+                                <div class="fw-bold text-primary">{{ u.username }}</div>
+                                <small class="text-dark">{{ u.full_name }}</small>
+                                {% if u.is_primary_superadmin or u.username == 'sakshi' %}
+                                <br/><span class="badge superadmin-badge py-0 px-1 mt-1" style="font-size: 0.65rem;">Primary Super Admin</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                <span class="badge bg-light text-dark border">{{ u.role }}</span>
+                            </td>
+                            {% for m in modules_def %}
+                            {% set actions_list = u_perms.get(m.id, []) %}
+                            <td class="text-center">
+                                {% if u.is_superadmin() %}
+                                <span class="badge bg-success" style="font-size: 0.65rem;">FULL</span>
+                                {% elif actions_list %}
+                                <div class="d-flex flex-wrap justify-content-center gap-1">
+                                    {% for act in actions_list %}
+                                    <span class="action-chip {{ actions_meta[act].badge }} text-white" title="{{ actions_meta[act].label }}">
+                                        {{ act[:3] | upper }}
+                                    </span>
+                                    {% endfor %}
+                                </div>
+                                {% else %}
+                                <span class="text-muted" style="font-size: 0.75rem;">—</span>
+                                {% endif %}
+                            </td>
+                            {% endfor %}
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- TAB 4: LOGIN HISTORY & AUDIT TRAIL -->
+    <div class="tab-pane fade {% if active_tab == 'activity' %}show active{% endif %}" id="activity-pane" role="tabpanel">
+        <div class="content-card p-0">
+            <div class="p-3 border-bottom d-flex justify-content-between align-items-center">
+                <div>
+                    <h5 class="fw-bold mb-0"><i class="fa-solid fa-clock-rotate-left me-2 text-primary"></i>Security & User Management Audit Trail</h5>
+                    <small class="text-muted">Recorded system activities, logins, password resets, and permission changes</small>
+                </div>
+            </div>
+            <div class="table-responsive">
+                <table class="table table-custom align-middle mb-0">
+                    <thead>
+                        <tr>
+                            <th>Timestamp</th>
+                            <th>User / Operator</th>
+                            <th>Action</th>
+                            <th>Module</th>
+                            <th>Target / Record</th>
+                            <th>Details / Modifications</th>
+                            <th>IP Address</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for log in activity_logs %}
+                        <tr>
+                            <td><small class="text-muted">{{ log.timestamp.strftime('%d-%b-%Y %I:%M %p') }}</small></td>
+                            <td>
+                                <span class="fw-bold text-dark">{{ log.user_name or 'System' }}</span>
+                                <br/><small class="text-muted">{{ log.role or 'N/A' }}</small>
+                            </td>
+                            <td>
+                                {% if log.action in ['LOGIN', 'LOGOUT'] %}
+                                <span class="badge bg-info text-dark">{{ log.action }}</span>
+                                {% elif log.action == 'CREATE' %}
+                                <span class="badge bg-success">{{ log.action }}</span>
+                                {% elif log.action in ['UPDATE', 'UPDATE_PERMISSIONS'] %}
+                                <span class="badge bg-warning text-dark">{{ log.action }}</span>
+                                {% elif log.action == 'DELETE' %}
+                                <span class="badge bg-danger">{{ log.action }}</span>
+                                {% else %}
+                                <span class="badge bg-secondary">{{ log.action }}</span>
+                                {% endif %}
+                            </td>
+                            <td><span class="badge bg-light text-dark border">{{ log.module }}</span></td>
+                            <td><code>{{ log.record_id or '-' }}</code></td>
+                            <td>
+                                <small class="text-truncate d-inline-block" style="max-width: 320px;" title="{{ log.new_value or log.reason or '' }}">
+                                    {{ log.new_value or log.reason or '-' }}
+                                </small>
+                            </td>
+                            <td><small class="text-muted">{{ log.ip_address or 'Local' }}</small></td>
+                        </tr>
+                        {% else %}
+                        <tr><td colspan="7" class="text-center text-muted py-4">No security audit logs recorded yet.</td></tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal: Create New User ID -->
+<div class="modal fade" id="createUserModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <form method="POST" action="{{ url_for('user_mgmt.create_user') }}">
+                <div class="modal-header bg-light">
+                    <h5 class="modal-title fw-bold"><i class="fa-solid fa-user-plus me-2 text-primary"></i>Create New User ID</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label class="form-label fw-bold">User ID / Login Username <span class="text-danger">*</span></label>
+                        <input type="text" name="username" class="form-control" placeholder="e.g. emp0045, rajesh.k, finance_lead" required autocomplete="off">
+                        <small class="text-muted">Must be a unique login handle.</small>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label fw-bold">Password <span class="text-danger">*</span></label>
+                        <input type="password" name="password" class="form-control" placeholder="Enter secure password" required minlength="4">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label fw-bold">Full Name <span class="text-danger">*</span></label>
+                        <input type="text" name="full_name" class="form-control" placeholder="e.g. Rajesh Kumar" required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Email Address</label>
+                        <input type="email" name="email" class="form-control" placeholder="user@ajitzone.com">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label fw-bold">System Role <span class="text-danger">*</span></label>
+                        <select name="role" class="form-select" required>
+                            {% for r in roles %}
+                            {% if r != 'Super_Admin' or session.get('is_primary_superadmin') %}
+                            <option value="{{ r }}" {% if r == 'HR' %}selected{% endif %}>{{ r.replace('_', ' ') }}</option>
+                            {% endif %}
+                            {% endfor %}
+                        </select>
+                        <small class="text-muted">Role defines baseline defaults; module-level permissions can be customized anytime.</small>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label fw-bold">Link to Employee Master Record</label>
+                        <select name="employee_id" class="form-select">
+                            <option value="">None (Administrative Account)</option>
+                            {% for emp in employees %}
+                            <option value="{{ emp.id }}">{{ emp.emp_id }} - {{ emp.name }} ({{ emp.department }})</option>
+                            {% endfor %}
+                        </select>
+                        <small class="text-muted">If linked, this user can be granted "View Own Records" to access their individual loans & EMI schedules.</small>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-light" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-brand">Create User Account</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+// Role Preset Templates Definition
+const PRESETS = {
+    hr_mgr: {
+        dashboard: ['view_all'],
+        employees: ['view_all', 'add', 'edit', 'export', 'import'],
+        loan_applications: ['view_all', 'add', 'edit', 'approve', 'export'],
+        loans: ['view_all', 'edit', 'export'],
+        emi: ['view_all', 'add', 'edit', 'export'],
+        adjustments: ['view_all', 'add', 'approve', 'export'],
+        salary: ['view_all', 'export'],
+        reports: ['view_all', 'export'],
+        documents: ['view_all', 'add', 'export'],
+        audit_logs: ['view_all']
+    },
+    hr_exec: {
+        dashboard: ['view_all'],
+        employees: ['view_all', 'add', 'edit', 'export', 'import'],
+        loan_applications: ['view_all', 'add', 'edit', 'export'],
+        loans: ['view_all', 'export'],
+        emi: ['view_all', 'add', 'export'],
+        adjustments: ['view_all', 'add', 'export'],
+        salary: ['view_all', 'export'],
+        reports: ['view_all', 'export'],
+        documents: ['view_all', 'add', 'export']
+    },
+    finance: {
+        dashboard: ['view_all'],
+        salary: ['view_all', 'import', 'export', 'manage'],
+        emi: ['view_all', 'add', 'edit', 'export'],
+        loans: ['view_all', 'export'],
+        adjustments: ['view_all', 'export'],
+        reports: ['view_all', 'export'],
+        documents: ['view_all', 'export']
+    },
+    viewer: {
+        dashboard: ['view_all'],
+        employees: ['view_all', 'export'],
+        loans: ['view_all', 'export'],
+        emi: ['view_all', 'export'],
+        reports: ['view_all', 'export'],
+        documents: ['view_all']
+    },
+    employee: {
+        dashboard: ['view_all'],
+        employees: ['view_own'],
+        loan_applications: ['view_own', 'add'],
+        loans: ['view_own'],
+        emi: ['view_own'],
+        reports: ['view_own'],
+        documents: ['view_own']
+    }
+};
+
+// Row Toggle in Modal
+function toggleModuleRow(userId, modId, state) {
+    const boxes = document.querySelectorAll(`.u-${userId}-${modId}`);
+    boxes.forEach(b => b.checked = state);
+}
+
+// User Modal Presets
+function applyUserPreset(userId, presetKey) {
+    const boxes = document.querySelectorAll(`.u-${userId}-box`);
+    if (presetKey === 'select_all') {
+        boxes.forEach(b => b.checked = true);
+        return;
+    }
+    if (presetKey === 'clear_all') {
+        boxes.forEach(b => b.checked = false);
+        return;
+    }
+    const template = PRESETS[presetKey];
+    if (!template) return;
+
+    boxes.forEach(b => {
+        const mod = b.getAttribute('data-module');
+        const act = b.getAttribute('data-action');
+        const allowed = template[mod] || [];
+        b.checked = allowed.includes(act);
+    });
+}
+
+// Tab 2: Interactive Matrix Logic
+let activeUserId = null;
+
+function loadUserMatrix(userId) {
+    if (!userId) {
+        document.querySelectorAll('.active-matrix-box').forEach(b => b.checked = false);
+        document.getElementById('matrixTargetHeading').innerText = 'Granular Module Permission Matrix';
+        activeUserId = null;
+        return;
+    }
+
+    activeUserId = userId;
+    fetch(`/users/${userId}/permissions/json`)
+        .then(res => res.json())
+        .then(data => {
+            document.getElementById('matrixTargetHeading').innerText = `Matrix: ${data.username} (${data.full_name}) - Role: ${data.role}`;
+            const perms = data.permissions || {};
+            document.querySelectorAll('.active-matrix-box').forEach(b => {
+                const mod = b.getAttribute('data-module');
+                const act = b.getAttribute('data-action');
+                const allowed = perms[mod] || [];
+                b.checked = allowed.includes(act);
+            });
+        })
+        .catch(err => {
+            console.error('Failed to load permissions JSON:', err);
+        });
+}
+
+function toggleActiveRow(modId, state) {
+    document.querySelectorAll(`.active-mod-${modId}`).forEach(b => b.checked = state);
+}
+
+function applyActivePreset(presetKey) {
+    const boxes = document.querySelectorAll('.active-matrix-box');
+    if (presetKey === 'select_all') {
+        boxes.forEach(b => b.checked = true);
+        return;
+    }
+    if (presetKey === 'clear_all') {
+        boxes.forEach(b => b.checked = false);
+        return;
+    }
+    const template = PRESETS[presetKey];
+    if (!template) return;
+
+    boxes.forEach(b => {
+        const mod = b.getAttribute('data-module');
+        const act = b.getAttribute('data-action');
+        const allowed = template[mod] || [];
+        b.checked = allowed.includes(act);
+    });
+}
+
+function saveActiveMatrix() {
+    if (!activeUserId) {
+        alert('Please select a user account first.');
+        return;
+    }
+
+    const payload = {};
+    document.querySelectorAll('.active-matrix-box:checked').forEach(b => {
+        const mod = b.getAttribute('data-module');
+        const act = b.getAttribute('data-action');
+        if (!payload[mod]) payload[mod] = [];
+        payload[mod].push(act);
+    });
+
+    fetch(`/users/${activeUserId}/permissions`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-Requested-With': 'XMLHttpRequest'
+        },
+        body: JSON.stringify({ permissions: payload })
+    })
+    .then(res => res.json())
+    .then(res => {
+        if (res.success) {
+            alert(res.message);
+            window.location.reload();
+        } else {
+            alert('Failed to save permissions.');
+        }
+    })
+    .catch(err => {
+        console.error('Error saving matrix:', err);
+        alert('An error occurred while saving.');
+    });
+}
+
+// Initialize first user if selected
+document.addEventListener('DOMContentLoaded', function() {
+    const selector = document.getElementById('matrixUserSelector');
+    if (selector && selector.value) {
+        loadUserMatrix(selector.value);
+    }
+});
+</script>
+{% endblock %}

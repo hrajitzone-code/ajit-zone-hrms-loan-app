@@ -1,0 +1,160 @@
+{% extends 'base.html' %}
+
+{% block title %}Salary Sheet Payroll Integration{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <div>
+        <h3 class="fw-bold mb-0">Salary Sheet Payroll Integration</h3>
+        <p class="text-muted small">Synchronize monthly loan EMI deductions with existing company Salary Sheet & Payroll</p>
+    </div>
+    <div class="d-flex gap-2">
+        {% if has_perm('salary', 'export') or is_superadmin() %}
+        <a href="{{ url_for('salary.export_salary_deductions', month=selected_month) }}" class="btn btn-outline-success">
+            <i class="fa-solid fa-file-excel me-1"></i> Export Payroll File
+        </a>
+        {% endif %}
+        {% if has_perm('salary', 'import') or is_superadmin() %}
+        <button type="button" class="btn btn-success" data-bs-toggle="modal" data-bs-target="#uploadSalaryModal">
+            <i class="fa-solid fa-file-import me-1"></i> Sync Salary Sheet
+        </button>
+        {% endif %}
+        {% if has_perm('salary', 'manage') or is_superadmin() %}
+        <form method="POST" action="{{ url_for('salary.push_deductions') }}" class="d-inline">
+            <input type="hidden" name="salary_month" value="{{ selected_month }}">
+            <button type="submit" class="btn btn-brand">
+                <i class="fa-solid fa-cloud-arrow-up me-1"></i> Push Deductions to Payroll
+            </button>
+        </form>
+        {% endif %}
+    </div>
+</div>
+
+<!-- Workflow Notice Box -->
+<div class="notice-highlight-box shadow-sm mb-4">
+    <div class="d-flex align-items-center">
+        <i class="fa-solid fa-diagram-project fs-3 me-3 text-primary"></i>
+        <div>
+            <h6 class="fw-bold mb-1 text-primary">Preferred Payroll Integration Flow:</h6>
+            <p class="mb-0 text-dark small">
+                <strong>Loan System</strong> $\rightarrow$ <strong>Monthly EMI / Deduction</strong> $\rightarrow$ <strong>Salary Sheet</strong> $\rightarrow$ <strong>Payroll Processing</strong>
+            </p>
+        </div>
+    </div>
+</div>
+
+<!-- Search & Status Filter -->
+<div class="content-card mb-4 py-3">
+    <form method="GET" action="{{ url_for('salary.index') }}" class="row g-3 align-items-center">
+        <div class="col-md-4">
+            <label class="form-label small fw-bold">Salary Month</label>
+            <input type="month" name="month" class="form-control" value="{{ selected_month }}" onchange="this.form.submit()">
+        </div>
+        <div class="col-md-3">
+            <label class="form-label small fw-bold">Deduction Status</label>
+            <select name="status" class="form-select" onchange="this.form.submit()">
+                <option value="">All Statuses</option>
+                <option value="Pending" {% if selected_status == 'Pending' %}selected{% endif %}>Pending</option>
+                <option value="Processed" {% if selected_status == 'Processed' %}selected{% endif %}>Processed</option>
+                <option value="Partially Deducted" {% if selected_status == 'Partially Deducted' %}selected{% endif %}>Partially Deducted</option>
+                <option value="Adjusted" {% if selected_status == 'Adjusted' %}selected{% endif %}>Adjusted</option>
+                <option value="Failed" {% if selected_status == 'Failed' %}selected{% endif %}>Failed</option>
+            </select>
+        </div>
+        <div class="col-md-3">
+            <label class="form-label small fw-bold">Search Employee / Batch</label>
+            <input type="text" name="q" class="form-control" placeholder="Emp ID, Name, Batch ID..." value="{{ search_q }}">
+        </div>
+        <div class="col-md-2 d-flex align-items-end gap-2">
+            <button type="submit" class="btn btn-primary w-100">Filter</button>
+            <a href="{{ url_for('salary.index') }}" class="btn btn-light border">Reset</a>
+        </div>
+    </form>
+</div>
+
+<!-- Sync Data Table -->
+<div class="content-card p-0">
+    <div class="card-header-flex px-3 pt-3">
+        <h5 class="card-title-main"><i class="fa-solid fa-list-check me-2 text-primary"></i>Monthly Salary Sheet Deduction Ledger (Month: {{ selected_month }})</h5>
+        <span class="badge bg-secondary">{{ items | length }} Records Synced</span>
+    </div>
+
+    <div class="table-responsive">
+        <table class="table table-custom">
+            <thead>
+                <tr>
+                    <th>Emp ID</th>
+                    <th>Employee Name</th>
+                    <th>Department</th>
+                    <th>Loan ID</th>
+                    <th>Scheduled EMI (₹)</th>
+                    <th>Deduction Amount (₹)</th>
+                    <th>Outstanding Balance (₹)</th>
+                    <th>Status</th>
+                    <th>Source</th>
+                    <th>Synced At</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for it in items %}
+                <tr>
+                    <td class="fw-bold text-primary">{{ it.employee.emp_id }}</td>
+                    <td class="fw-bold">{{ it.employee.name }}</td>
+                    <td><span class="badge bg-light text-dark border">{{ it.employee.department }}</span></td>
+                    <td class="fw-bold">
+                        {% if it.loan %}
+                        <a href="{{ url_for('loan.view_loan', loan_id=it.loan_id) }}" class="text-decoration-none">{{ it.loan.loan_id }}</a>
+                        {% else %}
+                        <span class="text-muted">-</span>
+                        {% endif %}
+                    </td>
+                    <td>{{ it.emi_amount | inr }}</td>
+                    <td class="fw-bold text-success">{{ it.deduction_amount | inr }}</td>
+                    <td class="fw-bold text-danger">{{ it.outstanding_balance | inr }}</td>
+                    <td>
+                        {% set st_clr = 'warning' %}
+                        {% if it.deduction_status == 'Processed' %}{% set st_clr = 'success' %}
+                        {% elif it.deduction_status == 'Partially Deducted' %}{% set st_clr = 'info' %}
+                        {% elif it.deduction_status == 'Failed' %}{% set st_clr = 'danger' %}{% endif %}
+                        <span class="badge bg-{{ st_clr }}">{{ it.deduction_status }}</span>
+                    </td>
+                    <td><small class="text-muted">{{ it.sync_source }}</small></td>
+                    <td><small class="text-muted">{{ it.synced_at | datefmt('%d-%b %H:%M') }}</small></td>
+                </tr>
+                {% else %}
+                <tr><td colspan="10" class="text-center text-muted py-4">No salary sheet sync records for this month. Upload Salary Sheet to sync data.</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<!-- Modal: Upload Salary Sheet -->
+<div class="modal fade" id="uploadSalaryModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <form method="POST" action="{{ url_for('salary.upload_salary_sheet') }}" enctype="multipart/form-data">
+                <div class="modal-header">
+                    <h5 class="modal-title fw-bold"><i class="fa-solid fa-file-excel text-success me-2"></i>Sync Salary Sheet File</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label class="form-label fw-bold">Salary Month <span class="text-danger">*</span></label>
+                        <input type="month" name="salary_month" class="form-control" value="{{ selected_month }}" required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label fw-bold">Select Salary File (Excel / CSV) <span class="text-danger">*</span></label>
+                        <input type="file" name="file" class="form-control" accept=".xlsx, .xls, .csv" required>
+                        <small class="text-muted">Matches employees by <strong>Employee ID</strong>. Automatically calculates active loan EMIs and updates deduction statuses.</small>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-light" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-success">Sync & Match Data</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}

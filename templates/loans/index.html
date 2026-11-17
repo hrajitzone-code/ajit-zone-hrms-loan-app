@@ -1,0 +1,89 @@
+{% extends 'base.html' %}
+
+{% block title %}Loan Applications{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <div>
+        <h3 class="fw-bold mb-0">Loan Applications & Accounts</h3>
+        <p class="text-muted small">Manage loan applications, approvals, and active accounts</p>
+    </div>
+    {% if has_perm('loan_applications', 'add') or is_superadmin() %}
+    <a href="{{ url_for('loan.create') }}" class="btn btn-brand">
+        <i class="fa-solid fa-plus me-1"></i> New Loan Application
+    </a>
+    {% endif %}
+</div>
+
+<!-- Search & Status Filter -->
+<div class="content-card mb-4 py-3">
+    <form method="GET" action="{{ url_for('loan.index') }}" class="row g-3 align-items-center">
+        <div class="col-md-5">
+            <div class="input-group">
+                <span class="input-group-text bg-light"><i class="fa-solid fa-magnifying-glass text-muted"></i></span>
+                <input type="text" name="q" class="form-control" placeholder="Search by Loan ID, Employee Name, Employee ID..." value="{{ search_q }}">
+            </div>
+        </div>
+        <div class="col-md-4">
+            <select name="status" class="form-select" onchange="this.form.submit()">
+                <option value="">All Statuses</option>
+                <option value="Active" {% if selected_status == 'Active' %}selected{% endif %}>Active Loans</option>
+                <option value="Pending" {% if selected_status == 'Pending' %}selected{% endif %}>Pending HR Approval</option>
+                <option value="Closed" {% if selected_status == 'Closed' %}selected{% endif %}>Closed Loans</option>
+                <option value="Rejected" {% if selected_status == 'Rejected' %}selected{% endif %}>Rejected Loans</option>
+            </select>
+        </div>
+        <div class="col-md-3 d-flex gap-2">
+            <button type="submit" class="btn btn-primary w-100">Filter</button>
+            <a href="{{ url_for('loan.index') }}" class="btn btn-light border">Reset</a>
+        </div>
+    </form>
+</div>
+
+<!-- Loans Table -->
+<div class="content-card p-0">
+    <div class="table-responsive">
+        <table class="table table-custom">
+            <thead>
+                <tr>
+                    <th>Loan ID</th>
+                    <th>Employee Details</th>
+                    <th>Loan Type</th>
+                    <th>Amount (₹)</th>
+                    <th>Monthly EMI (₹)</th>
+                    <th>Recovered</th>
+                    <th>Outstanding</th>
+                    <th>Status</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for loan in loans %}
+                <tr>
+                    <td class="fw-bold text-primary">{{ loan.loan_id }}</td>
+                    <td>
+                        <div class="fw-bold text-dark">{{ loan.employee.name }}</div>
+                        <small class="text-muted">{{ loan.employee.emp_id }} • {{ loan.employee.department }}</small>
+                    </td>
+                    <td><span class="badge bg-light text-dark border">{{ loan.loan_type }}</span></td>
+                    <td class="fw-bold">{{ loan.loan_amount | inr }}</td>
+                    <td>{{ loan.monthly_emi | inr }}</td>
+                    <td class="text-success fw-bold">{{ loan.total_recovered | inr }}</td>
+                    <td class="text-danger fw-bold">{{ loan.outstanding_balance | inr }}</td>
+                    <td>
+                        <span class="badge-status badge-{{ loan.loan_status | lower }}">{{ loan.loan_status }}</span>
+                    </td>
+                    <td>
+                        <a href="{{ url_for('loan.view_loan', loan_id=loan.id) }}" class="btn btn-sm btn-light border">
+                            <i class="fa-solid fa-folder-open text-primary me-1"></i> Open Account
+                        </a>
+                    </td>
+                </tr>
+                {% else %}
+                <tr><td colspan="9" class="text-center text-muted py-4">No loan records found.</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}

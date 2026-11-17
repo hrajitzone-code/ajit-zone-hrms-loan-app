@@ -1,0 +1,275 @@
+{% extends 'base.html' %}
+
+{% block title %}Employee Import & Template Center - {{ COMPANY_NAME }}{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <div>
+        <h3 class="fw-bold mb-0">Employee Master Import & Export Engine</h3>
+        <p class="text-muted small">Import bulk employee records from Excel or CSV, download templates, and view import history</p>
+    </div>
+    <div class="d-flex gap-2">
+        <a href="{{ url_for('employee.index') }}" class="btn btn-outline-secondary">
+            <i class="fa-solid fa-arrow-left me-1"></i> Back to Employee Directory
+        </a>
+    </div>
+</div>
+
+{% if not preview %}
+<!-- ========================================== -->
+<!-- 1. UPLOAD SCREEN & TEMPLATE DOWNLOADS      -->
+<!-- ========================================== -->
+<div class="row g-4">
+    <!-- Upload Box -->
+    <div class="col-lg-7">
+        <div class="content-card">
+            <div class="d-flex justify-content-between align-items-center mb-3 border-bottom pb-2">
+                <h5 class="fw-bold mb-0 text-success"><i class="fa-solid fa-file-excel me-2"></i>Upload Employee Spreadsheet</h5>
+                <span class="badge bg-light text-dark border">Supports .xlsx, .xls, .csv</span>
+            </div>
+
+            <form method="POST" action="{{ url_for('employee.import_excel') }}" enctype="multipart/form-data">
+                <input type="hidden" name="action" value="preview">
+
+                <div class="mb-3">
+                    <label class="form-label fw-bold">Select Spreadsheet File <span class="text-danger">*</span></label>
+                    <input type="file" name="file" class="form-control form-control-lg" accept=".xlsx, .xls, .csv" required>
+                    <small class="text-muted d-block mt-1">
+                        Compatible with Excel workbooks and CSV files. Standard columns like <strong>Employee ID, Name, Department, Designation, Salary, Joining Date, Contact & Bank details</strong> are automatically mapped.
+                    </small>
+                </div>
+
+                <!-- Update Existing Records Option -->
+                <div class="form-check form-switch p-3 bg-light rounded border mb-4">
+                    <input class="form-check-input ms-0 me-3" type="checkbox" name="update_existing" id="update_existing" value="1" checked>
+                    <label class="form-check-label fw-bold" for="update_existing">
+                        Update existing records if Employee ID already exists in the system
+                    </label>
+                    <small class="text-muted d-block ms-5">
+                        If checked, details of existing employees (salary, designation, contact info) will be updated. If unchecked, existing Employee IDs will be skipped.
+                    </small>
+                </div>
+
+                <button type="submit" class="btn btn-success btn-lg w-100 shadow-sm">
+                    <i class="fa-solid fa-magnifying-glass me-2"></i> Upload & Preview Data Validation
+                </button>
+            </form>
+        </div>
+
+        <!-- Downloadable Blank Templates Box -->
+        <div class="content-card mt-4 border-start border-4 border-primary">
+            <h5 class="fw-bold mb-2"><i class="fa-solid fa-download text-primary me-2"></i>Download Official Blank Import Templates</h5>
+            <p class="text-muted small mb-3">Use these standardized templates to avoid column mismatch errors. Sample format rows are included.</p>
+            <div class="d-flex gap-2 flex-wrap">
+                <a href="{{ url_for('employee.download_template', format='xlsx') }}" class="btn btn-outline-success">
+                    <i class="fa-solid fa-file-excel me-1"></i> Download Excel Template (.xlsx)
+                </a>
+                <a href="{{ url_for('employee.download_template', format='csv') }}" class="btn btn-outline-secondary">
+                    <i class="fa-solid fa-file-csv me-1"></i> Download CSV Template (.csv)
+                </a>
+            </div>
+        </div>
+    </div>
+
+    <!-- Import History Column -->
+    <div class="col-lg-5">
+        <div class="content-card">
+            <h5 class="fw-bold mb-3 border-bottom pb-2"><i class="fa-solid fa-clock-rotate-left text-primary me-2"></i>Import History</h5>
+            <div class="list-group list-group-flush">
+                {% for log in history %}
+                <div class="list-group-item px-0 py-3 border-bottom">
+                    <div class="d-flex justify-content-between align-items-center mb-1">
+                        <span class="fw-bold text-dark small text-truncate" style="max-width: 220px;" title="{{ log.file_name }}">
+                            <i class="fa-solid fa-file-lines text-muted me-1"></i>{{ log.file_name }}
+                        </span>
+                        <small class="text-muted">{{ log.imported_at | datefmt('%d-%b-%Y %H:%M') }}</small>
+                    </div>
+                    <div class="d-flex justify-content-between align-items-center small mt-1">
+                        <span class="text-success fw-bold">
+                            <i class="fa-solid fa-circle-check me-1"></i>{{ log.records_success }} Success
+                        </span>
+                        {% if log.records_failed and log.records_failed > 0 %}
+                        <span class="text-danger fw-bold">
+                            <i class="fa-solid fa-circle-xmark me-1"></i>{{ log.records_failed }} Failed
+                        </span>
+                        {% else %}
+                        <span class="text-muted">0 Errors</span>
+                        {% endif %}
+                        <span class="badge bg-light text-dark border">{{ log.records_processed }} Total</span>
+                    </div>
+                    {% if log.error_details %}
+                    <div class="mt-2">
+                        <button type="button" class="btn btn-xs btn-outline-danger py-0 px-2 small" data-bs-toggle="collapse" data-bs-target="#errorLog{{ log.id }}">
+                            View Error Log
+                        </button>
+                        <div class="collapse mt-2" id="errorLog{{ log.id }}">
+                            <div class="alert alert-light border p-2 small mb-0 font-monospace" style="max-height: 120px; overflow-y: auto;">
+                                {{ log.error_details }}
+                            </div>
+                        </div>
+                    </div>
+                    {% endif %}
+                </div>
+                {% else %}
+                <div class="text-muted small py-4 text-center">No import history recorded yet.</div>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+</div>
+
+{% else %}
+<!-- ========================================== -->
+<!-- 2. PREVIEW & VALIDATION SCREEN             -->
+<!-- ========================================== -->
+<div class="content-card mb-4">
+    <!-- Header with Action Buttons -->
+    <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+        <div>
+            <h5 class="fw-bold mb-1 text-success"><i class="fa-solid fa-clipboard-check me-2"></i>Validation Preview: {{ filename }}</h5>
+            <small class="text-muted">Review parsed records and validation summary before committing to database</small>
+        </div>
+        <div class="d-flex gap-2">
+            <a href="{{ url_for('employee.import_excel') }}" class="btn btn-light border">
+                <i class="fa-solid fa-times me-1"></i> Cancel & Re-upload
+            </a>
+            <form method="POST" action="{{ url_for('employee.import_excel') }}">
+                <input type="hidden" name="action" value="commit">
+                <input type="hidden" name="file_path" value="{{ file_path }}">
+                <input type="hidden" name="file_name" value="{{ filename }}">
+                <input type="hidden" name="update_existing" value="{{ 1 if update_existing else 0 }}">
+                <button type="submit" class="btn btn-success btn-lg shadow-sm" {% if valid_count == 0 %}disabled{% endif %}>
+                    <i class="fa-solid fa-cloud-arrow-up me-2"></i> Confirm & Import {{ valid_count }} Valid Records
+                </button>
+            </form>
+        </div>
+    </div>
+
+    <!-- Summary Metrics Grid -->
+    <div class="row g-3 mb-4">
+        <div class="col-md-2 col-sm-6">
+            <div class="stat-card border text-center py-2">
+                <span class="stat-label">Total Rows</span>
+                <h4 class="stat-value fs-4 mb-0">{{ total_rows }}</h4>
+            </div>
+        </div>
+        <div class="col-md-2 col-sm-6">
+            <div class="stat-card border-start border-4 border-success text-center py-2">
+                <span class="stat-label">New Records</span>
+                <h4 class="stat-value text-success fs-4 mb-0">{{ new_count }}</h4>
+            </div>
+        </div>
+        <div class="col-md-2 col-sm-6">
+            <div class="stat-card border-start border-4 border-info text-center py-2">
+                <span class="stat-label">Existing (Updates)</span>
+                <h4 class="stat-value text-info fs-4 mb-0">{{ update_count }}</h4>
+            </div>
+        </div>
+        <div class="col-md-3 col-sm-6">
+            <div class="stat-card border-start border-4 border-warning text-center py-2">
+                <span class="stat-label">In-File Duplicates</span>
+                <h4 class="stat-value text-warning fs-4 mb-0">{{ duplicate_count }}</h4>
+            </div>
+        </div>
+        <div class="col-md-3 col-sm-6">
+            <div class="stat-card border-start border-4 border-danger text-center py-2">
+                <span class="stat-label">Validation Errors</span>
+                <h4 class="stat-value text-danger fs-4 mb-0">{{ error_count }}</h4>
+            </div>
+        </div>
+    </div>
+
+    <!-- Mode Badge -->
+    <div class="alert alert-secondary d-flex justify-content-between align-items-center py-2 mb-3">
+        <span>
+            <strong>Update Policy:</strong>
+            {% if update_existing %}
+            <span class="badge bg-info text-dark">UPDATE EXISTING ENABLED</span> - Matching Employee IDs will have their master details updated.
+            {% else %}
+            <span class="badge bg-warning text-dark">UPDATE EXISTING DISABLED</span> - Existing Employee IDs will be skipped.
+            {% endif %}
+        </span>
+        <span class="small text-muted">Showing preview of parsed rows</span>
+    </div>
+
+    <!-- Detailed Errors Table (If any) -->
+    {% if errors_list %}
+    <div class="alert alert-warning mb-4">
+        <div class="d-flex justify-content-between align-items-center mb-2">
+            <h6 class="fw-bold mb-0"><i class="fa-solid fa-triangle-exclamation me-2"></i>Validation Issues & Duplicate Report ({{ errors_list | length }} Rows Affected):</h6>
+        </div>
+        <div class="table-responsive" style="max-height: 200px; overflow-y: auto;">
+            <table class="table table-sm table-bordered bg-white mb-0">
+                <thead class="table-light">
+                    <tr>
+                        <th style="width: 80px;">Row #</th>
+                        <th style="width: 140px;">Employee ID</th>
+                        <th>Validation Issue / Reason</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for err in errors_list %}
+                    <tr>
+                        <td class="fw-bold">{{ err.row_idx }}</td>
+                        <td><code>{{ err.emp_id }}</code></td>
+                        <td class="text-danger small">{{ err.reason }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Preview Table -->
+    <h6 class="fw-bold mb-2"><i class="fa-solid fa-table me-2 text-primary"></i>Parsed Records Preview:</h6>
+    <div class="table-responsive border rounded" style="max-height: 480px; overflow-y: auto;">
+        <table class="table table-custom table-sm mb-0">
+            <thead class="sticky-top bg-light">
+                <tr>
+                    <th>Row #</th>
+                    <th>Status</th>
+                    <th>Emp ID</th>
+                    <th>Full Name</th>
+                    <th>Department</th>
+                    <th>Designation</th>
+                    <th>Salary</th>
+                    <th>Joining Date</th>
+                    <th>Email</th>
+                    <th>Phone</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for r in rows %}
+                <tr class="{% if not r.is_valid %}table-danger{% elif r.status == 'UPDATE' %}table-info{% endif %}">
+                    <td>{{ r.row_idx }}</td>
+                    <td>
+                        {% if r.status == 'NEW' %}
+                        <span class="badge bg-success">NEW</span>
+                        {% elif r.status == 'UPDATE' %}
+                        <span class="badge bg-info text-dark">WILL UPDATE</span>
+                        {% elif r.status == 'DUPLICATE_IN_FILE' %}
+                        <span class="badge bg-warning text-dark">FILE DUPLICATE</span>
+                        {% else %}
+                        <span class="badge bg-danger">INVALID</span>
+                        {% endif %}
+                    </td>
+                    <td class="fw-bold">{{ r.emp_id }}</td>
+                    <td>{{ r.name }}</td>
+                    <td><span class="badge bg-light text-dark border">{{ r.department }}</span></td>
+                    <td>{{ r.designation }}</td>
+                    <td class="fw-bold text-success">{{ r.current_salary | inr }}</td>
+                    <td><small>{{ r.joining_date | datefmt('%d-%b-%Y') if r.joining_date else '-' }}</small></td>
+                    <td><small>{{ r.email or '-' }}</small></td>
+                    <td><small>{{ r.phone or '-' }}</small></td>
+                </tr>
+                {% else %}
+                <tr><td colspan="10" class="text-center text-muted py-4">No records to preview.</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endif %}
+
+{% endblock %}

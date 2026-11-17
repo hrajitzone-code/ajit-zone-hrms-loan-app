@@ -1,0 +1,248 @@
+{% extends 'base.html' %}
+
+{% block title %}Loan {{ loan.loan_id }}{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <div>
+        <h3 class="fw-bold mb-0">Loan Account: {{ loan.loan_id }}
+            <span class="badge-status badge-{{ loan.loan_status | lower }} fs-6 ms-2">{{ loan.loan_status }}</span>
+        </h3>
+        <p class="text-muted small">Employee: <strong>{{ employee.name }}</strong> ({{ employee.emp_id }}) | {{ employee.department }}</p>
+    </div>
+    <div class="d-flex gap-2">
+        <a href="{{ url_for('loan.index') }}" class="btn btn-outline-secondary">
+            <i class="fa-solid fa-arrow-left me-1"></i> Back to Loans
+        </a>
+
+        {% if loan.approval_status == 'Pending' and (has_perm('loan_applications', 'approve') or is_superadmin()) %}
+        <button type="button" class="btn btn-success" data-bs-toggle="modal" data-bs-target="#approvalModal">
+            <i class="fa-solid fa-check-double me-1"></i> Review & Approve Application
+        </button>
+        {% endif %}
+    </div>
+</div>
+
+<!-- Prominent Notice Banner (Requirement #7) -->
+{% if loan.loan_status in ['Active', 'Closed'] %}
+<div class="notice-highlight-box shadow-sm mb-4">
+    <div class="d-flex align-items-center">
+        <i class="fa-solid fa-circle-info fs-3 me-3 text-primary"></i>
+        <div>
+            <p class="mb-1">
+                “Your EMI of <strong>{{ loan.monthly_emi | inr }}</strong> will be deducted on the 
+                <strong>{{ loan.emi_deduction_day }}th</strong> of every month from 
+                <strong>{{ loan.tenure_from | datefmt('%d-%b-%Y') }}</strong> to 
+                <strong>{{ loan.tenure_to | datefmt('%d-%b-%Y') }}</strong>.”
+            </p>
+            <small class="text-muted">Automated Payroll Deduction Notice - {{ COMPANY_NAME }}</small>
+        </div>
+    </div>
+</div>
+{% endif %}
+
+<!-- Communication & Actions Bar (Requirement #8 & #12) -->
+<div class="content-card py-3 mb-4 bg-light">
+    <div class="d-flex flex-wrap align-items-center justify-content-between gap-2">
+        <div class="d-flex gap-2">
+            <a href="{{ url_for('comm.pdf_schedule', loan_id=loan.id) }}" target="_blank" class="btn btn-sm btn-danger shadow-sm">
+                <i class="fa-solid fa-file-pdf me-1"></i> View / Download EMI PDF
+            </a>
+            
+            <form method="POST" action="{{ url_for('comm.send_email', loan_id=loan.id) }}" class="d-inline">
+                <button type="submit" class="btn btn-sm btn-primary shadow-sm" {% if not employee.email %}disabled title="No email on profile"{% endif %}>
+                    <i class="fa-solid fa-paper-plane me-1"></i> Email PDF to Employee
+                </button>
+            </form>
+
+            <a href="{{ url_for('comm.whatsapp_share', loan_id=loan.id) }}" target="_blank" class="btn btn-sm btn-success shadow-sm">
+                <i class="fa-brands fa-whatsapp me-1"></i> WhatsApp Share API
+            </a>
+
+            {% if loan.loan_status == 'Closed' or loan.outstanding_balance == 0 %}
+            <a href="{{ url_for('comm.pdf_noc', loan_id=loan.id) }}" target="_blank" class="btn btn-sm btn-warning shadow-sm">
+                <i class="fa-solid fa-award me-1"></i> Download NOC Certificate PDF
+            </a>
+            {% endif %}
+        </div>
+
+        <div>
+            <small class="text-muted"><i class="fa-solid fa-shield-check me-1"></i>Approved Date: {{ loan.approval_date | datefmt('%d-%b-%Y') or 'Pending' }}</small>
+        </div>
+    </div>
+</div>
+
+<!-- Financial Summary Grid -->
+<div class="row g-3 mb-4">
+    <div class="col-md-3">
+        <div class="stat-card">
+            <span class="stat-label">Original Loan Amount</span>
+            <h4 class="stat-value text-primary fs-4">{{ loan.loan_amount | inr }}</h4>
+            <small class="text-muted">Type: {{ loan.loan_type }}</small>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="stat-card">
+            <span class="stat-label">Monthly EMI</span>
+            <h4 class="stat-value text-dark fs-4">{{ loan.monthly_emi | inr }}</h4>
+            <small class="text-muted">Deduction Day: {{ loan.emi_deduction_day }}th</small>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="stat-card">
+            <span class="stat-label">Total Recovered</span>
+            <h4 class="stat-value text-success fs-4">{{ loan.total_recovered | inr }}</h4>
+            <small class="text-success font-weight-bold">Deductions Received</small>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="stat-card">
+            <span class="stat-label">Outstanding Balance</span>
+            <h4 class="stat-value text-danger fs-4">{{ loan.outstanding_balance | inr }}</h4>
+            <small class="text-muted">Calculated Balance</small>
+        </div>
+    </div>
+</div>
+
+<!-- EMI Schedule Table (Requirement #5 & #6) -->
+<div class="content-card">
+    <div class="card-header-flex">
+        <h5 class="card-title-main"><i class="fa-solid fa-list-check me-2 text-primary"></i>EMI Recovery Schedule & Deduction Ledger</h5>
+        <span class="badge bg-secondary">{{ schedules | length }} Total Installments</span>
+    </div>
+
+    <div class="table-responsive">
+        <table class="table table-custom">
+            <thead>
+                <tr>
+                    <th>EMI No.</th>
+                    <th>Due Date</th>
+                    <th>Scheduled EMI (₹)</th>
+                    <th>Actual Deduction (₹)</th>
+                    <th>Outstanding After</th>
+                    <th>Status</th>
+                    <th>Actual Deduction Date</th>
+                    <th>Action / Remarks</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for item in schedules %}
+                <tr>
+                    <td class="fw-bold">{{ item.emi_no }}</td>
+                    <td>{{ item.due_date | datefmt('%d-%b-%Y') }}</td>
+                    <td class="fw-bold text-dark">{{ item.scheduled_emi | inr }}</td>
+                    <td class="fw-bold text-success">{{ item.actual_deduction | inr }}</td>
+                    <td class="fw-bold text-muted">{{ item.outstanding_after | inr }}</td>
+                    <td>
+                        <span class="badge-status badge-{{ item.status | lower }}">{{ item.status }}</span>
+                    </td>
+                    <td>{{ item.actual_deduction_date | datefmt('%d-%b-%Y') or '-' }}</td>
+                    <td>
+                        {% if loan.loan_status == 'Active' %}
+                        <button type="button" class="btn btn-sm btn-outline-primary" data-bs-toggle="modal" data-bs-target="#deductModal{{ item.id }}">
+                            <i class="fa-solid fa-pencil me-1"></i> Deduct
+                        </button>
+                        {% else %}
+                        <small class="text-muted">{{ item.remarks or '-' }}</small>
+                        {% endif %}
+                    </td>
+                </tr>
+
+                <!-- Deduction Modal for each item -->
+                <div class="modal fade" id="deductModal{{ item.id }}" tabindex="-1">
+                    <div class="modal-dialog">
+                        <div class="modal-content">
+                            <form method="POST" action="{{ url_for('emi.record_deduction', schedule_id=item.id) }}">
+                                <div class="modal-header">
+                                    <h5 class="modal-title fw-bold">Record EMI Deduction (EMI #{{ item.emi_no }})</h5>
+                                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                                </div>
+                                <div class="modal-body">
+                                    <p class="small text-muted mb-3">Loan ID: <strong>{{ loan.loan_id }}</strong> | Employee: <strong>{{ employee.name }}</strong></p>
+                                    
+                                    <div class="mb-3">
+                                        <label class="form-label font-weight-bold">Scheduled EMI Amount</label>
+                                        <input type="text" class="form-control bg-light fw-bold" value="₹{{ item.scheduled_emi }}" readonly>
+                                    </div>
+                                    
+                                    <div class="mb-3">
+                                        <label class="form-label font-weight-bold">Actual Amount Deducted (₹) <span class="text-danger">*</span></label>
+                                        <input type="number" step="0.01" name="amount_deducted" class="form-control form-control-lg fw-bold text-success" value="{{ item.scheduled_emi }}" required>
+                                        <small class="text-muted">If actual amount &lt; scheduled EMI, status will automatically update to <strong>Partial EMI</strong>.</small>
+                                    </div>
+
+                                    <div class="mb-3">
+                                        <label class="form-label">Deduction Date</label>
+                                        <input type="date" name="deduction_date" class="form-control" value="{{ item.due_date }}" required>
+                                    </div>
+
+                                    <div class="mb-3">
+                                        <label class="form-label">Payment Mode</label>
+                                        <select name="payment_mode" class="form-select">
+                                            <option value="Payroll Deduction">Payroll Deduction</option>
+                                            <option value="Bank Transfer">Bank Transfer / NEFT</option>
+                                            <option value="Cheque">Cheque</option>
+                                            <option value="Cash Adjustment">Cash Adjustment</option>
+                                        </select>
+                                    </div>
+
+                                    <div class="mb-3">
+                                        <label class="form-label">Remarks / Transaction Ref</label>
+                                        <input type="text" name="remarks" class="form-control" placeholder="Optional notes">
+                                    </div>
+                                </div>
+                                <div class="modal-footer">
+                                    <button type="button" class="btn btn-light" data-bs-dismiss="modal">Cancel</button>
+                                    <button type="submit" class="btn btn-success">Save Deduction</button>
+                                </div>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+
+                {% else %}
+                <tr><td colspan="8" class="text-center text-muted py-4">No EMI schedule generated yet. Approve application to generate schedule.</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<!-- Modal: HR Approval -->
+{% if loan.approval_status == 'Pending' %}
+<div class="modal fade" id="approvalModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <form method="POST" action="{{ url_for('loan.approve_loan', loan_id=loan.id) }}">
+                <div class="modal-header">
+                    <h5 class="modal-title fw-bold">HR Loan Application Review</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <p class="mb-2"><strong>Employee:</strong> {{ employee.name }} ({{ employee.emp_id }})</p>
+                    <p class="mb-2"><strong>Loan Amount:</strong> {{ loan.loan_amount | inr }}</p>
+                    <p class="mb-3"><strong>Monthly EMI:</strong> {{ loan.monthly_emi | inr }}</p>
+                    
+                    <div class="mb-3">
+                        <label class="form-label font-weight-bold">Approval Action</label>
+                        <select name="action" class="form-select fw-bold">
+                            <option value="approve" class="text-success">Approve & Activate Loan</option>
+                            <option value="reject" class="text-danger">Reject Loan Application</option>
+                        </select>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label">HR Approval Remarks / Notes</label>
+                        <textarea name="approval_remarks" class="form-control" rows="3" placeholder="Approval justification..."></textarea>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-light" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Submit Approval Action</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endif %}
+{% endblock %}
