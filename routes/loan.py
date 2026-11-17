@@ -249,3 +249,186 @@ def approve_loan(loan_id):
         flash(f"Loan application {loan.loan_id} rejected.", 'info')
 
     return redirect(url_for('loan.view_loan', loan_id=loan.id))
+
+
+@loan_bp.route('/loans/<int:loan_id>/delete', methods=['POST'])
+@login_required
+def delete_loan(loan_id):
+    """
+    Selective Single Loan Deletion.
+    Permanently deletes a loan entry from Loan Applications & Accounts.
+    Cascades removal of all child records (EMI schedules, deductions, adjustments,
+    uploaded documents, closures, NOCs, communication logs) and records an immutable audit log.
+    """
+    if not (g.user.has_permission('loans', 'delete') or g.user.has_permission('loan_applications', 'delete') or g.user.is_superadmin()):
+        flash("Permission Denied: You do not have authorization to delete loan entries.", "danger")
+        return redirect(url_for('loan.index'))
+
+    loan = Loan.query.get_or_404(loan_id)
+    emp = loan.employee
+    delete_reason = request.form.get('delete_reason', '').strip() or 'Selective loan entry deletion'
+
+    loan_code = loan.loan_id
+    emp_name = emp.name if emp else 'Unknown Employee'
+    emp_code = emp.emp_id if emp else 'N/A'
+    old_details = (
+        f"Loan ID: {loan.loan_id}, Employee: {emp_name} ({emp_code}), "
+        f"Type: {loan.loan_type}, Amount: ₹{loan.loan_amount:,.2f}, Monthly EMI: ₹{loan.monthly_emi:,.2f}, "
+        f"Status: {loan.loan_status}, Recovered: ₹{loan.total_recovered:,.2f}, Outstanding: ₹{loan.outstanding_balance:,.2f}"
+    )
+
+    from models import LoanDocument, NOCRecord, CommunicationLog, SalarySheetSync
+
+    # 1. Clean up attached document files on disk
+    for doc in loan.documents:
+        if doc.file_path and os.path.exists(doc.file_path):
+            try:
+                os.remove(doc.file_path)
+            except Exception:
+                pass
+
+    # 2. Clean up NOC records and generated PDF files
+    noc_records = NOCRecord.query.filter_by(loan_id=loan.id).all()
+    for noc in noc_records:
+        if noc.pdf_path and os.path.exists(noc.pdf_path):
+            try:
+                os.remove(noc.pdf_path)
+            except Exception:
+                pass
+        db.session.delete(noc)
+
+    # 3. Clean up generated schedule PDF
+    schedule_pdf = os.path.join(current_app.config['UPLOAD_FOLDER'], 'pdf', f"Schedule_{loan.loan_id}.pdf")
+    if os.path.exists(schedule_pdf):
+        try:
+            os.remove(schedule_pdf)
+        except Exception:
+            pass
+
+    # 4. Clean up communication logs
+    CommunicationLog.query.filter_by(loan_id=loan.id).delete()
+
+    # 5. Nullify loan_id on SalarySheetSync records
+    SalarySheetSync.query.filter_by(loan_id=loan.id).update({'loan_id': None})
+
+    # 6. Delete Loan (cascades schedules, deductions, adjustments, documents, closure)
+    db.session.delete(loan)
+
+    # 7. Immutable Audit Log
+    audit = AuditLog(
+        user_id=g.user.id,
+        user_name=g.user.full_name,
+        role=g.user.role,
+        action='DELETE',
+        module='Loans',
+        record_id=loan_code,
+        old_value=old_details,
+        reason=f"{delete_reason} (Deleted by {g.user.full_name})",
+        ip_address=request.remote_addr
+    )
+    db.session.add(audit)
+    db.session.commit()
+
+    flash(f"Loan entry {loan_code} for {emp_name} has been permanently deleted.", "success")
+    return redirect(url_for('loan.index'))
+
+
+@loan_bp.route('/loans/bulk-delete', methods=['POST'])
+@login_required
+def bulk_delete_loans():
+    """
+    Selective Bulk Loan Deletion.
+    Permanently deletes selected loan entries in batch.
+    Never allows 'Delete All' without individual selection.
+    """
+    if not (g.user.has_permission('loans', 'delete') or g.user.has_permission('loan_applications', 'delete') or g.user.is_superadmin()):
+        flash("Permission Denied: You do not have authorization to delete loan entries.", "danger")
+        return redirect(url_for('loan.index'))
+
+    selected_ids_str = request.form.get('selected_loan_ids', '').strip()
+    delete_reason = request.form.get('bulk_delete_reason', '').strip() or 'Selective bulk loan deletion'
+
+    if not selected_ids_str:
+        loan_ids = request.form.getlist('loan_ids')
+    else:
+        loan_ids = [s.strip() for s in selected_ids_str.split(',') if s.strip()]
+
+    if not loan_ids:
+        flash("No loan entries were selected for deletion.", "warning")
+        return redirect(url_for('loan.index'))
+
+    from models import LoanDocument, NOCRecord, CommunicationLog, SalarySheetSync
+
+    deleted_count = 0
+    deleted_codes = []
+
+    for l_id in loan_ids:
+        try:
+            loan_pk = int(l_id)
+        except (ValueError, TypeError):
+            continue
+
+        loan = Loan.query.get(loan_pk)
+        if not loan:
+            continue
+
+        loan_code = loan.loan_id
+        emp_name = loan.employee.name if loan.employee else 'Unknown'
+        emp_code = loan.employee.emp_id if loan.employee else 'N/A'
+
+        old_details = (
+            f"Loan ID: {loan.loan_id}, Employee: {emp_name} ({emp_code}), "
+            f"Type: {loan.loan_type}, Amount: ₹{loan.loan_amount:,.2f}, "
+            f"Status: {loan.loan_status}, Recovered: ₹{loan.total_recovered:,.2f}"
+        )
+
+        for doc in loan.documents:
+            if doc.file_path and os.path.exists(doc.file_path):
+                try:
+                    os.remove(doc.file_path)
+                except Exception:
+                    pass
+
+        noc_records = NOCRecord.query.filter_by(loan_id=loan.id).all()
+        for noc in noc_records:
+            if noc.pdf_path and os.path.exists(noc.pdf_path):
+                try:
+                    os.remove(noc.pdf_path)
+                except Exception:
+                    pass
+            db.session.delete(noc)
+
+        schedule_pdf = os.path.join(current_app.config['UPLOAD_FOLDER'], 'pdf', f"Schedule_{loan.loan_id}.pdf")
+        if os.path.exists(schedule_pdf):
+            try:
+                os.remove(schedule_pdf)
+            except Exception:
+                pass
+
+        CommunicationLog.query.filter_by(loan_id=loan.id).delete()
+        SalarySheetSync.query.filter_by(loan_id=loan.id).update({'loan_id': None})
+        db.session.delete(loan)
+
+        audit = AuditLog(
+            user_id=g.user.id,
+            user_name=g.user.full_name,
+            role=g.user.role,
+            action='DELETE',
+            module='Loans',
+            record_id=loan_code,
+            old_value=old_details,
+            reason=f"Bulk Deletion: {delete_reason}",
+            ip_address=request.remote_addr
+        )
+        db.session.add(audit)
+        deleted_count += 1
+        deleted_codes.append(loan_code)
+
+    db.session.commit()
+
+    if deleted_count > 0:
+        flash(f"Successfully deleted {deleted_count} loan entries: {', '.join(deleted_codes[:5])}{'...' if len(deleted_codes) > 5 else ''}", "success")
+    else:
+        flash("No valid loan entries could be deleted.", "warning")
+
+    return redirect(url_for('loan.index'))

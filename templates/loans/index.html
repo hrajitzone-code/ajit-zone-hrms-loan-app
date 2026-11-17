@@ -6,13 +6,15 @@
 <div class="d-flex justify-content-between align-items-center mb-4">
     <div>
         <h3 class="fw-bold mb-0">Loan Applications & Accounts</h3>
-        <p class="text-muted small">Manage loan applications, approvals, and active accounts</p>
+        <p class="text-muted small">Manage loan applications, approvals, active accounts, and record lifecycles</p>
     </div>
-    {% if has_perm('loan_applications', 'add') or is_superadmin() %}
-    <a href="{{ url_for('loan.create') }}" class="btn btn-brand">
-        <i class="fa-solid fa-plus me-1"></i> New Loan Application
-    </a>
-    {% endif %}
+    <div class="d-flex gap-2">
+        {% if has_perm('loan_applications', 'add') or is_superadmin() %}
+        <a href="{{ url_for('loan.create') }}" class="btn btn-brand">
+            <i class="fa-solid fa-plus me-1"></i> New Loan Application
+        </a>
+        {% endif %}
+    </div>
 </div>
 
 <!-- Search & Status Filter -->
@@ -42,10 +44,33 @@
 
 <!-- Loans Table -->
 <div class="content-card p-0">
+    {% if has_perm('loans', 'delete') or has_perm('loan_applications', 'delete') or is_superadmin() %}
+    <!-- Bulk Selection Action Bar -->
+    <div id="bulkLoanToolbar" class="p-3 bg-light border-bottom d-none align-items-center justify-content-between">
+        <div class="d-flex align-items-center">
+            <span class="badge bg-primary fs-6 me-2" id="selectedLoanCount">0</span>
+            <span class="fw-semibold text-secondary">loan entry/entries selected</span>
+        </div>
+        <div class="d-flex gap-2">
+            <button type="button" class="btn btn-sm btn-outline-secondary" onclick="clearLoanSelection()">
+                <i class="fa-solid fa-xmark me-1"></i> Deselect All
+            </button>
+            <button type="button" class="btn btn-sm btn-danger shadow-sm" data-bs-toggle="modal" data-bs-target="#bulkDeleteLoanModal">
+                <i class="fa-solid fa-trash-can me-1"></i> Delete Selected Entries
+            </button>
+        </div>
+    </div>
+    {% endif %}
+
     <div class="table-responsive">
-        <table class="table table-custom">
+        <table class="table table-custom mb-0">
             <thead>
                 <tr>
+                    {% if has_perm('loans', 'delete') or has_perm('loan_applications', 'delete') or is_superadmin() %}
+                    <th style="width: 40px;" class="text-center">
+                        <input type="checkbox" id="selectAllLoans" class="form-check-input" title="Select all on this page">
+                    </th>
+                    {% endif %}
                     <th>Loan ID</th>
                     <th>Employee Details</th>
                     <th>Loan Type</th>
@@ -54,12 +79,17 @@
                     <th>Recovered</th>
                     <th>Outstanding</th>
                     <th>Status</th>
-                    <th>Actions</th>
+                    <th class="text-end">Actions</th>
                 </tr>
             </thead>
             <tbody>
                 {% for loan in loans %}
                 <tr>
+                    {% if has_perm('loans', 'delete') or has_perm('loan_applications', 'delete') or is_superadmin() %}
+                    <td class="text-center">
+                        <input type="checkbox" class="form-check-input loan-select-box" value="{{ loan.id }}" data-loan-code="{{ loan.loan_id }}">
+                    </td>
+                    {% endif %}
                     <td class="fw-bold text-primary">{{ loan.loan_id }}</td>
                     <td>
                         <div class="fw-bold text-dark">{{ loan.employee.name }}</div>
@@ -73,17 +103,193 @@
                     <td>
                         <span class="badge-status badge-{{ loan.loan_status | lower }}">{{ loan.loan_status }}</span>
                     </td>
-                    <td>
-                        <a href="{{ url_for('loan.view_loan', loan_id=loan.id) }}" class="btn btn-sm btn-light border">
-                            <i class="fa-solid fa-folder-open text-primary me-1"></i> Open Account
-                        </a>
+                    <td class="text-end">
+                        <div class="btn-group">
+                            <a href="{{ url_for('loan.view_loan', loan_id=loan.id) }}" class="btn btn-sm btn-light border" title="Open Loan Account">
+                                <i class="fa-solid fa-folder-open text-primary me-1"></i> Open
+                            </a>
+                            {% if has_perm('loans', 'delete') or has_perm('loan_applications', 'delete') or is_superadmin() %}
+                            <button type="button" class="btn btn-sm btn-outline-danger" 
+                                    onclick="confirmDeleteLoan('{{ loan.id }}', '{{ loan.loan_id }}', '{{ loan.employee.name | escape }}', '{{ loan.loan_amount | inr }}', '{{ loan.total_recovered | inr }}', '{{ loan.outstanding_balance | inr }}', '{{ loan.loan_status }}')" 
+                                    title="Delete Loan Entry">
+                                <i class="fa-solid fa-trash-can"></i>
+                            </button>
+                            {% endif %}
+                        </div>
                     </td>
                 </tr>
                 {% else %}
-                <tr><td colspan="9" class="text-center text-muted py-4">No loan records found.</td></tr>
+                <tr>
+                    <td colspan="{% if has_perm('loans', 'delete') or has_perm('loan_applications', 'delete') or is_superadmin() %}10{% else %}9{% endif %}" class="text-center text-muted py-4">
+                        No loan records found.
+                    </td>
+                </tr>
                 {% endfor %}
             </tbody>
         </table>
     </div>
 </div>
+
+<!-- Single Loan Delete Modal -->
+<div class="modal fade" id="singleDeleteLoanModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content border-0 shadow">
+            <div class="modal-header bg-danger text-white">
+                <h5 class="modal-title fw-bold"><i class="fa-solid fa-triangle-exclamation me-2"></i>Delete Loan Entry</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <form id="singleDeleteLoanForm" method="POST" action="">
+                <div class="modal-body">
+                    <p class="text-dark mb-3">Are you sure you want to permanently delete this loan entry from the system?</p>
+                    
+                    <div class="card bg-light border-0 mb-3">
+                        <div class="card-body p-3">
+                            <div class="row g-2 small">
+                                <div class="col-6"><span class="text-muted">Loan ID:</span> <strong id="modalLoanCode" class="text-primary"></strong></div>
+                                <div class="col-6"><span class="text-muted">Status:</span> <strong id="modalLoanStatus"></strong></div>
+                                <div class="col-12"><span class="text-muted">Employee:</span> <strong id="modalEmpName"></strong></div>
+                                <div class="col-6"><span class="text-muted">Loan Amount:</span> <strong id="modalLoanAmount"></strong></div>
+                                <div class="col-6"><span class="text-muted">Recovered:</span> <strong id="modalLoanRecovered" class="text-success"></strong></div>
+                                <div class="col-12"><span class="text-muted">Outstanding:</span> <strong id="modalLoanOutstanding" class="text-danger"></strong></div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div id="modalRecoveryWarning" class="alert alert-warning py-2 small d-none">
+                        <i class="fa-solid fa-circle-exclamation me-1"></i>
+                        <strong>Financial Notice:</strong> This loan has recorded recoveries/deductions. Deleting will permanently remove associated EMI schedules, deduction records, and payment logs.
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label fw-bold small text-secondary">Reason for Deletion <span class="text-danger">*</span></label>
+                        <input type="text" name="delete_reason" class="form-control" placeholder="e.g. Cancelled application / Data entry mistake / Duplicate record" required>
+                    </div>
+
+                    <div class="form-check mb-2">
+                        <input type="checkbox" class="form-check-input" id="confirmDeleteCheck" required>
+                        <label class="form-check-label small text-muted" for="confirmDeleteCheck">
+                            I confirm that this loan entry should be permanently removed and recorded in the audit trail.
+                        </label>
+                    </div>
+                </div>
+                <div class="modal-footer bg-light">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-danger">
+                        <i class="fa-solid fa-trash-can me-1"></i> Permanently Delete
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Bulk Loan Delete Modal -->
+<div class="modal fade" id="bulkDeleteLoanModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content border-0 shadow">
+            <div class="modal-header bg-danger text-white">
+                <h5 class="modal-title fw-bold"><i class="fa-solid fa-triangle-exclamation me-2"></i>Bulk Delete Loan Entries</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <form method="POST" action="{{ url_for('loan.bulk_delete_loans') }}">
+                <input type="hidden" name="selected_loan_ids" id="hiddenBulkLoanIds">
+                <div class="modal-body">
+                    <p class="text-dark mb-3">
+                        Are you sure you want to permanently delete all <strong id="modalBulkCount" class="text-danger">0</strong> selected loan entries?
+                    </p>
+                    <div class="alert alert-danger py-2 small mb-3">
+                        <i class="fa-solid fa-triangle-exclamation me-1"></i>
+                        <strong>Irreversible Action:</strong> All associated EMI schedules, deduction logs, and attached documents for the selected loans will be permanently deleted.
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label fw-bold small text-secondary">Reason for Bulk Deletion <span class="text-danger">*</span></label>
+                        <input type="text" name="bulk_delete_reason" class="form-control" placeholder="e.g. Bulk cleanup of test records / Administrative adjustment" required>
+                    </div>
+                    <div class="form-check mb-2">
+                        <input type="checkbox" class="form-check-input" id="confirmBulkDeleteCheck" required>
+                        <label class="form-check-label small text-muted" for="confirmBulkDeleteCheck">
+                            I understand this action is permanent and will be logged in the immutable audit log.
+                        </label>
+                    </div>
+                </div>
+                <div class="modal-footer bg-light">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-danger">
+                        <i class="fa-solid fa-trash-can me-1"></i> Delete Selected Entries
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<script>
+function confirmDeleteLoan(id, code, name, amount, recovered, outstanding, status) {
+    document.getElementById('singleDeleteLoanForm').action = '/loans/' + id + '/delete';
+    document.getElementById('modalLoanCode').textContent = code;
+    document.getElementById('modalEmpName').textContent = name;
+    document.getElementById('modalLoanAmount').textContent = amount;
+    document.getElementById('modalLoanRecovered').textContent = recovered;
+    document.getElementById('modalLoanOutstanding').textContent = outstanding;
+    document.getElementById('modalLoanStatus').textContent = status;
+    
+    const recWarn = document.getElementById('modalRecoveryWarning');
+    if (recovered && recovered !== '₹0.00' && recovered !== '0' && recovered !== '₹0') {
+        recWarn.classList.remove('d-none');
+    } else {
+        recWarn.classList.add('d-none');
+    }
+    
+    document.getElementById('confirmDeleteCheck').checked = false;
+    new bootstrap.Modal(document.getElementById('singleDeleteLoanModal')).show();
+}
+
+function updateLoanSelection() {
+    const checkboxes = document.querySelectorAll('.loan-select-box:checked');
+    const count = checkboxes.length;
+    const toolbar = document.getElementById('bulkLoanToolbar');
+    const countBadge = document.getElementById('selectedLoanCount');
+    const hiddenInput = document.getElementById('hiddenBulkLoanIds');
+    const bulkCountText = document.getElementById('modalBulkCount');
+
+    if (countBadge) countBadge.textContent = count;
+    if (bulkCountText) bulkCountText.textContent = count;
+
+    if (count > 0) {
+        if (toolbar) {
+            toolbar.classList.remove('d-none');
+            toolbar.classList.add('d-flex');
+        }
+        const ids = Array.from(checkboxes).map(cb => cb.value);
+        if (hiddenInput) hiddenInput.value = ids.join(',');
+    } else {
+        if (toolbar) {
+            toolbar.classList.add('d-none');
+            toolbar.classList.remove('d-flex');
+        }
+        if (hiddenInput) hiddenInput.value = '';
+    }
+}
+
+function clearLoanSelection() {
+    document.querySelectorAll('.loan-select-box').forEach(cb => cb.checked = false);
+    const selectAll = document.getElementById('selectAllLoans');
+    if (selectAll) selectAll.checked = false;
+    updateLoanSelection();
+}
+
+document.addEventListener('DOMContentLoaded', function() {
+    const selectAll = document.getElementById('selectAllLoans');
+    if (selectAll) {
+        selectAll.addEventListener('change', function() {
+            document.querySelectorAll('.loan-select-box').forEach(cb => cb.checked = selectAll.checked);
+            updateLoanSelection();
+        });
+    }
+
+    document.querySelectorAll('.loan-select-box').forEach(cb => {
+        cb.addEventListener('change', updateLoanSelection);
+    });
+});
+</script>
 {% endblock %}

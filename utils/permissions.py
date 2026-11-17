@@ -28,7 +28,7 @@ MODULES_DEF = [
         'name': 'Active & Closed Loans',
         'category': 'Loan',
         'description': 'Loan accounts, schedules & closure/NOCs',
-        'actions': ['view_all', 'view_own', 'edit', 'export']
+        'actions': ['view_all', 'view_own', 'edit', 'delete', 'export']
     },
     {
         'id': 'emi',
@@ -118,8 +118,8 @@ def get_default_role_permissions(role):
     elif role == 'HR_Manager':
         perms['dashboard'] = ['view_all']
         perms['employees'] = ['view_all', 'add', 'edit', 'export', 'import']
-        perms['loan_applications'] = ['view_all', 'add', 'edit', 'approve', 'export']
-        perms['loans'] = ['view_all', 'edit', 'export']
+        perms['loan_applications'] = ['view_all', 'add', 'edit', 'approve', 'delete', 'export']
+        perms['loans'] = ['view_all', 'edit', 'delete', 'export']
         perms['emi'] = ['view_all', 'add', 'edit', 'export']
         perms['adjustments'] = ['view_all', 'add', 'approve', 'export']
         perms['salary'] = ['view_all', 'export']
