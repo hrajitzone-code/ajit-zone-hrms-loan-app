@@ -65,8 +65,14 @@ def create():
 
         employee = Employee.query.filter_by(emp_id=emp_id).first()
         if not employee:
-            flash(f"Employee with ID '{emp_id}' not found.", 'danger')
-            return redirect(request.url)
+            flash(f"Employee with ID '{emp_id}' not found. Please select an employee from the master dropdown or add them in Employee Master first.", 'danger')
+            employees = Employee.query.filter_by(status='Active').all()
+            return render_template('loans/create.html',
+                                   next_loan_id=generate_next_loan_id(),
+                                   employees=employees,
+                                   default_emp_id=emp_id,
+                                   form_data=request.form,
+                                   today_date=date.today().strftime('%Y-%m-%d'))
 
         # Scoping check: If user cannot view all applications, they can only apply for themselves
         if not g.user.can_view_all('loan_applications') and g.user.employee_id:
