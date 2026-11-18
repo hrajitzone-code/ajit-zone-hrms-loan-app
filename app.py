@@ -86,13 +86,7 @@ def create_app(config_class=Config):
             ACTIONS_META=ACTIONS_META
         )
 
-    # Vercel Serverless Blob Persistence Synchronization
-    @app.before_request
-    def auto_sync_from_blob():
-        from utils.blob_db import sync_from_blob, is_vercel
-        if is_vercel():
-            sync_from_blob()
-
+    # Vercel Serverless Blob Persistence Synchronization on State Changes
     @app.after_request
     def auto_sync_to_blob(response):
         from flask import request
@@ -103,7 +97,10 @@ def create_app(config_class=Config):
                     db.session.commit()
                 except Exception:
                     pass
-                sync_to_blob()
+                try:
+                    sync_to_blob()
+                except Exception as e:
+                    print(f"[BLOB AUTO-SYNC ERROR] {e}", flush=True)
         return response
 
     # Database Initialization & Seeding

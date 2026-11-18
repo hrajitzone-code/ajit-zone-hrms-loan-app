@@ -81,7 +81,15 @@ def sync_from_blob(force=False):
             tmp_write_file = LOCAL_TMP_DB + ".download"
             with open(tmp_write_file, 'wb') as f:
                 f.write(content)
+            try:
+                os.chmod(tmp_write_file, 0o666)
+            except Exception:
+                pass
             os.replace(tmp_write_file, LOCAL_TMP_DB)
+            try:
+                os.chmod(LOCAL_TMP_DB, 0o666)
+            except Exception:
+                pass
             _cached_uploaded_at = remote_uploaded_at
             print(f"[BLOB SYNC] Successfully synced database ({len(content)} bytes) to {LOCAL_TMP_DB}", flush=True)
 
