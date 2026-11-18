@@ -86,6 +86,26 @@ def create_app(config_class=Config):
             ACTIONS_META=ACTIONS_META
         )
 
+    # Vercel Serverless Blob Persistence Synchronization
+    @app.before_request
+    def auto_sync_from_blob():
+        from utils.blob_db import sync_from_blob, is_vercel
+        if is_vercel():
+            sync_from_blob()
+
+    @app.after_request
+    def auto_sync_to_blob(response):
+        from flask import request
+        from utils.blob_db import sync_to_blob, is_vercel
+        if is_vercel() and request.method in ['POST', 'PUT', 'DELETE', 'PATCH']:
+            if response.status_code < 400:
+                try:
+                    db.session.commit()
+                except Exception:
+                    pass
+                sync_to_blob()
+        return response
+
     # Database Initialization & Seeding
     with app.app_context():
         os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
@@ -93,14 +113,17 @@ def create_app(config_class=Config):
         os.makedirs(os.path.join(app.config['UPLOAD_FOLDER'], 'noc'), exist_ok=True)
         os.makedirs(os.path.dirname(app.config['SQLALCHEMY_DATABASE_URI'].replace('sqlite:///', '')), exist_ok=True)
 
-        # On Vercel: copy bundled instance/loan_system.db to writable /tmp/loan_system.db
-        is_vercel = os.environ.get('VERCEL') == '1' or os.environ.get('VERCEL_ENV') is not None
-        if is_vercel:
-            bundled_db = os.path.join(os.path.abspath(os.path.dirname(__file__)), 'instance', 'loan_system.db')
+        # On Vercel: sync cloud database from Vercel Blob or initialize from seed
+        is_vercel_env = os.environ.get('VERCEL') == '1' or os.environ.get('VERCEL_ENV') is not None
+        if is_vercel_env:
+            from utils.blob_db import sync_from_blob
             target_tmp_db = '/tmp/loan_system.db'
-            if os.path.exists(bundled_db) and (not os.path.exists(target_tmp_db) or os.path.getsize(target_tmp_db) == 0):
-                import shutil
-                shutil.copyfile(bundled_db, target_tmp_db)
+            synced = sync_from_blob(force=True)
+            if not synced or not os.path.exists(target_tmp_db) or os.path.getsize(target_tmp_db) == 0:
+                bundled_db = os.path.join(os.path.abspath(os.path.dirname(__file__)), 'instance', 'loan_system.db')
+                if os.path.exists(bundled_db):
+                    import shutil
+                    shutil.copyfile(bundled_db, target_tmp_db)
 
         db.create_all()
 
