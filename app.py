@@ -22,6 +22,7 @@ def create_app(config_class=Config):
     from routes.settings import settings_bp
     from routes.user_mgmt import user_mgmt_bp
     from routes.salary_route import salary_bp
+    from routes.google_sheets_route import google_sheets_bp
 
     app.register_blueprint(auth_bp)
     app.register_blueprint(dashboard_bp)
@@ -34,6 +35,7 @@ def create_app(config_class=Config):
     app.register_blueprint(settings_bp)
     app.register_blueprint(user_mgmt_bp)
     app.register_blueprint(salary_bp)
+    app.register_blueprint(google_sheets_bp)
 
     # Custom Jinja Filters
     @app.template_filter('inr')

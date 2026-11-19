@@ -130,7 +130,12 @@
 
                         {% if has_perm('settings', 'view_all') or has_perm('settings', 'manage') or is_superadmin() %}
                         <li class="nav-item">
-                            <a class="nav-link {% if 'settings' in request.endpoint %}active{% endif %}" href="{{ url_for('settings.index') }}">
+                            <a class="nav-link {% if 'google_sheets' in request.endpoint %}active{% endif %}" href="{{ url_for('google_sheets.index') }}">
+                                <i class="fa-solid fa-table-cells text-success"></i> Google Sheets Sync
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link {% if 'settings' in request.endpoint and 'google_sheets' not in request.endpoint %}active{% endif %}" href="{{ url_for('settings.index') }}">
                                 <i class="fa-solid fa-gears"></i> System Settings
                             </a>
                         </li>

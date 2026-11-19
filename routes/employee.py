@@ -2,6 +2,7 @@ from flask import Blueprint, render_template, request, redirect, url_for, flash,
 from models import db, Employee, Loan, ImportLog, AuditLog, User
 from routes.auth import login_required, role_required, permission_required
 from utils.excel_handler import parse_excel_employee_file, generate_blank_employee_template, export_employees_to_file
+from utils.google_sheets_sync import trigger_auto_sync_if_enabled
 from datetime import datetime, date
 import os
 import json
@@ -119,6 +120,7 @@ def add_employee():
     )
     db.session.add(audit)
     db.session.commit()
+    trigger_auto_sync_if_enabled()
 
     flash(f'Employee {name} ({emp_id}) added successfully!', 'success')
     return redirect(url_for('employee.index'))
@@ -264,6 +266,7 @@ def delete_employee(emp_id_pk):
     )
     db.session.add(audit)
     db.session.commit()
+    trigger_auto_sync_if_enabled()
 
     flash(f"Employee {emp_name} ({emp_id_code}) has been permanently deleted.", 'success')
     return redirect(request.referrer or url_for('employee.index'))
@@ -346,6 +349,7 @@ def bulk_delete():
             db.session.add(audit)
 
     db.session.commit()
+    trigger_auto_sync_if_enabled()
 
     msg = f"Bulk Action Completed: {deleted_count} employee(s) permanently deleted."
     if archived_count > 0:

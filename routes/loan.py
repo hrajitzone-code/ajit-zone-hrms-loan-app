@@ -3,6 +3,7 @@ from models import db, Loan, Employee, EMISchedule, LoanDocument, AuditLog
 from routes.auth import login_required, role_required, permission_required
 from utils.emi_calculator import calculate_emi_schedule, validate_loan_eligibility
 from utils.pdf_builder import generate_emi_schedule_pdf
+from utils.google_sheets_sync import trigger_auto_sync_if_enabled
 from datetime import datetime, date
 import os
 
@@ -137,6 +138,7 @@ def create():
         )
         db.session.add(audit)
         db.session.commit()
+        trigger_auto_sync_if_enabled()
 
         flash(f"Loan Application {loan_id_code} submitted successfully and under review!", 'success')
         return redirect(url_for('loan.view_loan', loan_id=loan.id))
@@ -229,6 +231,7 @@ def approve_loan(loan_id):
         )
         db.session.add(audit)
         db.session.commit()
+        trigger_auto_sync_if_enabled()
 
         flash(f"Loan {loan.loan_id} approved and EMI schedule generated successfully!", 'success')
     else:
@@ -334,6 +337,7 @@ def delete_loan(loan_id):
     )
     db.session.add(audit)
     db.session.commit()
+    trigger_auto_sync_if_enabled()
 
     flash(f"Loan entry {loan_code} for {emp_name} has been permanently deleted.", "success")
     return redirect(url_for('loan.index'))
@@ -431,6 +435,7 @@ def bulk_delete_loans():
         deleted_codes.append(loan_code)
 
     db.session.commit()
+    trigger_auto_sync_if_enabled()
 
     if deleted_count > 0:
         flash(f"Successfully deleted {deleted_count} loan entries: {', '.join(deleted_codes[:5])}{'...' if len(deleted_codes) > 5 else ''}", "success")
