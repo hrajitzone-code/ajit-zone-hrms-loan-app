@@ -1,5 +1,34 @@
 // AJIT ZONE PVT. LTD. - Client-side Logic & Interactions
 
+// CSRF Protection Interceptor for AJAX / Fetch Requests
+(function setupCSRF() {
+    const metaTag = document.querySelector('meta[name="csrf-token"]');
+    const csrfToken = metaTag ? metaTag.getAttribute('content') : '';
+    if (!csrfToken) return;
+
+    const originalFetch = window.fetch;
+    window.fetch = function(url, options = {}) {
+        const method = (options.method || 'GET').toUpperCase();
+        if (['POST', 'PUT', 'DELETE', 'PATCH'].includes(method)) {
+            if (!options.headers) {
+                options.headers = {};
+            }
+            if (options.headers instanceof Headers) {
+                if (!options.headers.has('X-CSRFToken')) {
+                    options.headers.append('X-CSRFToken', csrfToken);
+                }
+            } else if (Array.isArray(options.headers)) {
+                options.headers.push(['X-CSRFToken', csrfToken]);
+            } else {
+                if (!options.headers['X-CSRFToken']) {
+                    options.headers['X-CSRFToken'] = csrfToken;
+                }
+            }
+        }
+        return originalFetch(url, options);
+    };
+})();
+
 document.addEventListener('DOMContentLoaded', function() {
     initEmployeeLookup();
     initEmiPreviewCalculator();

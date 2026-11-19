@@ -7,6 +7,8 @@ from app import create_app
 from models import db, User
 
 app = create_app()
+app.config['TESTING'] = True
+app.config['WTF_CSRF_ENABLED'] = False
 
 def test_routes_rendering():
     with app.test_client() as client:
@@ -15,8 +17,8 @@ def test_routes_rendering():
         assert res.status_code == 200, f"Login route status {res.status_code}"
         print("[SUCCESS] /login rendered 200 OK")
 
-        # Login as Super_Admin
-        login_res = client.post('/login', data={'username': 'superadmin', 'password': 'super123'}, follow_redirects=True)
+        # Login as Super_Admin Sakshi Shukla
+        login_res = client.post('/login', data={'username': 'sakshi', 'password': 'sakshi123'}, follow_redirects=True)
         assert login_res.status_code == 200, f"Dashboard status {login_res.status_code}"
         print("[SUCCESS] Login POST & redirect to /dashboard rendered 200 OK")
 

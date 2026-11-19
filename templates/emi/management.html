@@ -111,6 +111,7 @@
                     <div class="modal-dialog">
                         <div class="modal-content">
                             <form method="POST" action="{{ url_for('emi.record_deduction', schedule_id=item.id) }}">
+                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
                                 <div class="modal-header">
                                     <h5 class="modal-title fw-bold">Record Deduction (EMI #{{ item.emi_no }})</h5>
                                     <button type="button" class="btn-close" data-bs-dismiss="modal"></button>

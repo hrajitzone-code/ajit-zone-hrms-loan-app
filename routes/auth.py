@@ -2,6 +2,7 @@ from flask import Blueprint, render_template, request, redirect, url_for, flash,
 from models import db, User, AuditLog
 from functools import wraps
 from datetime import datetime
+from extensions import limiter
 
 auth_bp = Blueprint('auth', __name__)
 
@@ -97,6 +98,7 @@ def load_logged_in_user():
             return redirect(url_for('auth.login'))
 
 @auth_bp.route('/login', methods=['GET', 'POST'])
+@limiter.limit("10 per minute; 50 per hour", methods=["POST"])
 def login():
     if request.method == 'POST':
         username = request.form.get('username', '').strip()

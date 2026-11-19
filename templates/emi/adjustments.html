@@ -52,10 +52,12 @@
                     <td>
                         {% if adj.approval_status == 'Pending' and (has_perm('adjustments', 'approve') or is_superadmin()) %}
                         <form method="POST" action="{{ url_for('emi.approve_adjustment', adj_id=adj.id) }}" class="d-inline">
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
                             <input type="hidden" name="action" value="approve">
                             <button type="submit" class="btn btn-sm btn-success">Approve</button>
                         </form>
                         <form method="POST" action="{{ url_for('emi.approve_adjustment', adj_id=adj.id) }}" class="d-inline">
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
                             <input type="hidden" name="action" value="reject">
                             <button type="submit" class="btn btn-sm btn-danger">Reject</button>
                         </form>
@@ -77,6 +79,7 @@
     <div class="modal-dialog">
         <div class="modal-content">
             <form method="POST" action="{{ url_for('emi.adjustments') }}">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
                 <div class="modal-header">
                     <h5 class="modal-title fw-bold">New Schedule Adjustment Request</h5>
                     <button type="button" class="btn-close" data-bs-dismiss="modal"></button>

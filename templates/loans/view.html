@@ -56,6 +56,7 @@
             </a>
             
             <form method="POST" action="{{ url_for('comm.send_email', loan_id=loan.id) }}" class="d-inline">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
                 <button type="submit" class="btn btn-sm btn-primary shadow-sm" {% if not employee.email %}disabled title="No email on profile"{% endif %}>
                     <i class="fa-solid fa-paper-plane me-1"></i> Email PDF to Employee
                 </button>
@@ -159,6 +160,7 @@
                     <div class="modal-dialog">
                         <div class="modal-content">
                             <form method="POST" action="{{ url_for('emi.record_deduction', schedule_id=item.id) }}">
+                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
                                 <div class="modal-header">
                                     <h5 class="modal-title fw-bold">Record EMI Deduction (EMI #{{ item.emi_no }})</h5>
                                     <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
@@ -220,6 +222,7 @@
     <div class="modal-dialog">
         <div class="modal-content">
             <form method="POST" action="{{ url_for('loan.approve_loan', loan_id=loan.id) }}">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
                 <div class="modal-header">
                     <h5 class="modal-title fw-bold">HR Loan Application Review</h5>
                     <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
@@ -261,6 +264,7 @@
                 <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
             </div>
             <form method="POST" action="{{ url_for('loan.delete_loan', loan_id=loan.id) }}">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
                 <div class="modal-body">
                     <p class="text-dark mb-3">Are you sure you want to permanently delete this loan entry from the system?</p>
                     

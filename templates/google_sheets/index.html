@@ -79,6 +79,7 @@
                 <i class="fa-solid fa-link text-primary me-2"></i>Google Sheet Connection Settings
             </h5>
             <form method="POST" action="{{ url_for('google_sheets.save_config') }}">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
                 <div class="mb-3">
                     <label class="form-label fw-bold">Google Sheet URL</label>
                     <input type="url" name="google_sheets_url" id="google_sheets_url" class="form-control" 
@@ -125,6 +126,7 @@
 
             <div class="d-grid gap-3">
                 <form method="POST" action="{{ url_for('google_sheets.sync_to_sheet') }}">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
                     <button type="submit" class="btn btn-brand w-100 py-3 d-flex align-items-center justify-content-center gap-2" {% if not is_connected %}disabled{% endif %}>
                         <i class="fa-solid fa-cloud-arrow-up fa-lg"></i>
                         <div class="text-start">
@@ -135,6 +137,7 @@
                 </form>
 
                 <form method="POST" action="{{ url_for('google_sheets.sync_from_sheet') }}">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
                     <button type="submit" class="btn btn-outline-primary w-100 py-3 d-flex align-items-center justify-content-center gap-2" {% if not is_connected %}disabled{% endif %}>
                         <i class="fa-solid fa-cloud-arrow-down fa-lg"></i>
                         <div class="text-start">
@@ -238,6 +241,7 @@ function testConnection() {
 
     const formData = new FormData();
     formData.append('webapp_url', webappUrl);
+    formData.append('csrf_token', '{{ csrf_token() }}');
 
     fetch('{{ url_for("google_sheets.test_connection") }}', {
         method: 'POST',

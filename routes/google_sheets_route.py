@@ -10,6 +10,7 @@ from utils.google_sheets_sync import (
     generate_master_excel_bytes
 )
 from utils.blob_db import is_vercel, sync_to_blob
+from extensions import csrf
 from datetime import datetime
 import io
 
@@ -293,6 +294,7 @@ def download_excel():
     )
 
 @google_sheets_bp.route('/api/google-sheets/webhook', methods=['POST'])
+@csrf.exempt
 def webhook_sync():
     """
     Webhook endpoint callable by Google Apps Script triggers to synchronize data

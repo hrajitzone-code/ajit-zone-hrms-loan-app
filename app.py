@@ -9,6 +9,29 @@ def create_app(config_class=Config):
 
     # Initialize extensions
     db.init_app(app)
+    from extensions import csrf, limiter
+    csrf.init_app(app)
+    limiter.init_app(app)
+
+    # Security Error Handlers
+    from flask_wtf.csrf import CSRFError
+    from flask_limiter.errors import RateLimitExceeded
+    from flask import flash, redirect, request, jsonify, url_for
+
+    @app.errorhandler(CSRFError)
+    def handle_csrf_error(e):
+        if request.is_json or request.path.startswith('/api/'):
+            return jsonify({'success': False, 'error': 'CSRF token missing or invalid', 'message': e.description}), 400
+        flash('Security Warning: Session expired or security token invalid. Please try submitting again.', 'danger')
+        return redirect(request.referrer or url_for('dashboard.index')), 400
+
+    @app.errorhandler(429)
+    @app.errorhandler(RateLimitExceeded)
+    def handle_ratelimit_error(e):
+        if request.is_json or request.path.startswith('/api/'):
+            return jsonify({'success': False, 'error': 'Rate limit exceeded', 'message': 'Too many requests. Please wait a minute.'}), 429
+        flash('Security Alert: Too many login attempts. Please wait a minute before trying again.', 'danger')
+        return render_template('login.html'), 429
 
     # Register Blueprints
     from routes.auth import auth_bp

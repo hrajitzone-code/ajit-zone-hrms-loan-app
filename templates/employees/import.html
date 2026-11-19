@@ -29,6 +29,7 @@
             </div>
 
             <form method="POST" action="{{ url_for('employee.import_excel') }}" enctype="multipart/form-data">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
                 <input type="hidden" name="action" value="preview">
 
                 <div class="mb-3">
@@ -134,6 +135,7 @@
                 <i class="fa-solid fa-times me-1"></i> Cancel & Re-upload
             </a>
             <form method="POST" action="{{ url_for('employee.import_excel') }}">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
                 <input type="hidden" name="action" value="commit">
                 <input type="hidden" name="file_path" value="{{ file_path }}">
                 <input type="hidden" name="file_name" value="{{ filename }}">

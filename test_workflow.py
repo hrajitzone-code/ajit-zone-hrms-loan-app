@@ -52,8 +52,9 @@ def test_full_application_workflow():
         monthly_emi = 5000.0
         start_date = date(2026, 10, 5)
 
+        test_wf_loan_id = f"LN-WF-{datetime.now().strftime('%Y%m%d%H%M%S')}"
         loan = Loan(
-            loan_id="LN-2026-0001",
+            loan_id=test_wf_loan_id,
             employee_id=target_emp.id,
             loan_type="Personal Loan",
             loan_amount=loan_amount,

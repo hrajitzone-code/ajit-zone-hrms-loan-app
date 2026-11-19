@@ -7,6 +7,7 @@ class TestLoanDeletion(unittest.TestCase):
     def setUp(self):
         self.app = create_app()
         self.app.config['TESTING'] = True
+        self.app.config['WTF_CSRF_ENABLED'] = False
         self.client = self.app.test_client()
 
     def test_loan_deletion_workflow(self):

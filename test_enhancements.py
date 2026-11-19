@@ -9,6 +9,8 @@ from models import db, User, Employee, Loan, AuditLog, ImportLog
 from datetime import datetime, date
 
 app = create_app()
+app.config['TESTING'] = True
+app.config['WTF_CSRF_ENABLED'] = False
 
 def run_tests():
     print("==================================================")
@@ -17,7 +19,7 @@ def run_tests():
 
     with app.test_client() as client:
         # 1. Login
-        login_res = client.post('/login', data={'username': 'superadmin', 'password': 'super123'}, follow_redirects=True)
+        login_res = client.post('/login', data={'username': 'sakshi', 'password': 'sakshi123'}, follow_redirects=True)
         assert login_res.status_code == 200
         print("[PASS] Super_Admin login verified.")
 

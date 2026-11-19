@@ -21,6 +21,7 @@
         {% endif %}
         {% if has_perm('salary', 'manage') or is_superadmin() %}
         <form method="POST" action="{{ url_for('salary.push_deductions') }}" class="d-inline">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
             <input type="hidden" name="salary_month" value="{{ selected_month }}">
             <button type="submit" class="btn btn-brand">
                 <i class="fa-solid fa-cloud-arrow-up me-1"></i> Push Deductions to Payroll
@@ -134,6 +135,7 @@
     <div class="modal-dialog">
         <div class="modal-content">
             <form method="POST" action="{{ url_for('salary.upload_salary_sheet') }}" enctype="multipart/form-data">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
                 <div class="modal-header">
                     <h5 class="modal-title fw-bold"><i class="fa-solid fa-file-excel text-success me-2"></i>Sync Salary Sheet File</h5>
                     <button type="button" class="btn-close" data-bs-dismiss="modal"></button>

@@ -232,6 +232,7 @@
                                     <!-- Toggle Status Button -->
                                     {% if not (u.is_primary_superadmin or u.username == 'sakshi') and u.id != session.get('user_id') %}
                                     <form method="POST" action="{{ url_for('user_mgmt.toggle_status', user_id=u.id) }}" class="d-inline">
+                                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
                                         <button type="submit" class="btn btn-light border text-{{ 'danger' if u.is_active else 'success' }}" title="{{ 'Deactivate' if u.is_active else 'Activate' }} Account">
                                             <i class="fa-solid fa-power-off"></i>
                                         </button>
@@ -255,6 +256,7 @@
                             <div class="modal-dialog modal-xl modal-dialog-scrollable">
                                 <div class="modal-content">
                                     <form method="POST" action="{{ url_for('user_mgmt.update_permissions', user_id=u.id) }}">
+                                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
                                         <div class="modal-header bg-light">
                                             <div>
                                                 <h5 class="modal-title fw-bold mb-0">
@@ -353,6 +355,7 @@
                                         <div class="modal-footer d-flex justify-content-between">
                                             {% if not (u.is_primary_superadmin or u.username == 'sakshi') %}
                                             <form method="POST" action="{{ url_for('user_mgmt.reset_permissions_to_default', user_id=u.id) }}" class="d-inline">
+                                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
                                                 <button type="submit" class="btn btn-outline-secondary btn-sm" onclick="return confirm('Reset this user to standard role defaults?')">
                                                     <i class="fa-solid fa-rotate-left me-1"></i>Reset to {{ u.role.replace('_', ' ') }} Defaults
                                                 </button>
@@ -377,6 +380,7 @@
                             <div class="modal-dialog">
                                 <div class="modal-content">
                                     <form method="POST" action="{{ url_for('user_mgmt.edit_user', user_id=u.id) }}">
+                                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
                                         <div class="modal-header">
                                             <h5 class="modal-title fw-bold">Edit Account: {{ u.username }}</h5>
                                             <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
@@ -432,6 +436,7 @@
                             <div class="modal-dialog">
                                 <div class="modal-content">
                                     <form method="POST" action="{{ url_for('user_mgmt.reset_password', user_id=u.id) }}">
+                                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
                                         <div class="modal-header">
                                             <h5 class="modal-title fw-bold"><i class="fa-solid fa-key me-2 text-warning"></i>Reset Password: {{ u.username }}</h5>
                                             <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
@@ -457,6 +462,7 @@
                             <div class="modal-dialog">
                                 <div class="modal-content">
                                     <form method="POST" action="{{ url_for('user_mgmt.delete_user', user_id=u.id) }}">
+                                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
                                         <div class="modal-header bg-danger text-white">
                                             <h5 class="modal-title fw-bold"><i class="fa-solid fa-triangle-exclamation me-2"></i>Delete User Account</h5>
                                             <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
@@ -715,6 +721,7 @@
     <div class="modal-dialog">
         <div class="modal-content">
             <form method="POST" action="{{ url_for('user_mgmt.create_user') }}">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
                 <div class="modal-header bg-light">
                     <h5 class="modal-title fw-bold"><i class="fa-solid fa-user-plus me-2 text-primary"></i>Create New User ID</h5>
                     <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
@@ -924,7 +931,8 @@ function saveActiveMatrix() {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json',
-            'X-Requested-With': 'XMLHttpRequest'
+            'X-Requested-With': 'XMLHttpRequest',
+            'X-CSRFToken': '{{ csrf_token() }}'
         },
         body: JSON.stringify({ permissions: payload })
     })
