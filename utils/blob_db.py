@@ -76,6 +76,14 @@ def sync_from_blob(force=False):
             with urllib.request.urlopen(down_req, timeout=5.0) as down_resp:
                 content = down_resp.read()
 
+            # Close and dispose active SQLAlchemy connections before replacing database file
+            try:
+                from models import db
+                db.session.remove()
+                db.engine.dispose()
+            except Exception:
+                pass
+
             os.makedirs(os.path.dirname(LOCAL_TMP_DB), exist_ok=True)
             # Write atomically using a temporary file
             tmp_write_file = LOCAL_TMP_DB + ".download"
@@ -90,6 +98,14 @@ def sync_from_blob(force=False):
                 os.chmod(LOCAL_TMP_DB, 0o666)
             except Exception:
                 pass
+
+            # Dispose engine after file replacement so new queries open clean handles
+            try:
+                from models import db
+                db.engine.dispose()
+            except Exception:
+                pass
+
             _cached_uploaded_at = remote_uploaded_at
             print(f"[BLOB SYNC] Successfully synced database ({len(content)} bytes) to {LOCAL_TMP_DB}", flush=True)
 

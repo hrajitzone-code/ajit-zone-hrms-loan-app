@@ -56,6 +56,10 @@ class Config:
             'pool_recycle': 300,
             'pool_pre_ping': True
         }
+    else:
+        SQLALCHEMY_ENGINE_OPTIONS = {
+            'connect_args': {'timeout': 20}
+        }
         
     UPLOAD_FOLDER = upload_dir
     MAX_CONTENT_LENGTH = 32 * 1024 * 1024  # 32MB max upload

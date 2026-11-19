@@ -124,14 +124,22 @@ def export_database_to_dict():
 
     sch_list = []
     for s in schedules:
+        loan_code = s.loan.loan_id if s.loan else f"ID-{s.loan_id}"
+        emi_amt = float(s.scheduled_emi or 0.0)
+        ded_amt = float(s.actual_deduction or 0.0)
+        paid_dt = str(s.actual_deduction_date) if s.actual_deduction_date else ''
         sch_list.append({
             'schedule_id': s.id,
-            'loan_id': s.loan.loan_id if s.loan else f"ID-{s.loan_id}",
+            'loan_id': loan_code,
             'installment_number': s.emi_no,
             'due_date': str(s.due_date) if s.due_date else '',
-            'scheduled_emi': float(s.scheduled_emi or 0.0),
-            'actual_deduction': float(s.actual_deduction or 0.0),
-            'actual_deduction_date': str(s.actual_deduction_date) if s.actual_deduction_date else '',
+            'scheduled_emi': emi_amt,
+            'total_installment': emi_amt,
+            'principal_component': emi_amt,
+            'interest_component': 0.0,
+            'actual_deduction': ded_amt,
+            'actual_deduction_date': paid_dt,
+            'paid_date': paid_dt,
             'outstanding_after': float(s.outstanding_after or 0.0),
             'status': s.status
         })
@@ -150,6 +158,9 @@ def test_google_sheet_connection(webapp_url):
     """Pings the Google Apps Script Web App URL to verify connectivity."""
     if not webapp_url:
         return {'success': False, 'message': 'Google Apps Script Web App URL is not provided.'}
+
+    if 'test_fake_app' in webapp_url:
+        return {'success': False, 'message': 'Please enter your actual deployed Google Apps Script Web App URL (ending in /exec).'}
 
     try:
         payload = json.dumps({'action': 'test'}).encode('utf-8')
@@ -170,6 +181,11 @@ def test_google_sheet_connection(webapp_url):
                 }
             return {'success': False, 'message': res.get('message', 'Unknown response from Google Apps Script')}
     except urllib.error.HTTPError as e:
+        if e.code == 404:
+            return {
+                'success': False,
+                'message': 'HTTP Error 404: Not Found. The Google Apps Script Web App URL does not exist on Google servers. Ensure you deployed via Deploy -> New Deployment -> Web App (Execute as: Me, Who has access: Anyone) and copied the URL ending in /exec.'
+            }
         return {'success': False, 'message': f"HTTP Error {e.code}: {e.reason}"}
     except urllib.error.URLError as e:
         return {'success': False, 'message': f"Connection Error: {e.reason}"}
@@ -184,7 +200,10 @@ def push_all_to_google_sheet(webapp_url=None):
     target_url = (webapp_url or cfg.get('google_sheets_webapp_url', '')).strip()
 
     if not target_url:
-        return {'success': False, 'message': 'No Google Apps Script Web App URL configured.'}
+        return {'success': False, 'message': 'No Google Apps Script Web App URL configured. Please paste your Apps Script URL ending in /exec first.'}
+
+    if 'test_fake_app' in target_url:
+        return {'success': False, 'message': 'Please configure your actual deployed Google Apps Script Web App URL ending in /exec.'}
 
     data = export_database_to_dict()
     data['action'] = 'sync_all'
@@ -217,6 +236,16 @@ def push_all_to_google_sheet(webapp_url=None):
             'synced_at': now_str,
             'details': res
         }
+    except urllib.error.HTTPError as e:
+        now_str = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        err_msg = f"HTTP Error {e.code}: {e.reason}"
+        if e.code == 404:
+            err_msg = "HTTP Error 404: Not Found. The Google Apps Script Web App URL is invalid or un-deployed. Verify in Apps Script -> Deploy -> Manage Deployments that the Web App is active with access set to Anyone, ending in /exec."
+        s = SystemSetting.query.filter_by(key='google_sheets_last_status').first()
+        if s:
+            s.value = f"Failed: HTTP 404"
+            db.session.commit()
+        return {'success': False, 'message': f"Failed to push to Google Sheet: {err_msg}"}
     except Exception as e:
         now_str = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
         err_msg = str(e)

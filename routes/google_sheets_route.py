@@ -81,7 +81,11 @@ function handleRequest(e, method) {
         writeTable(emiSheet, [
           'Loan ID', 'Installment No', 'Due Date', 'Principal', 'Interest', 'Total EMI', 'Status', 'Paid Date'
         ], data.emi_schedules.map(function(s) {
-          return [s.loan_id, s.installment_number, s.due_date, s.principal_component, s.interest_component, s.total_installment, s.status, s.paid_date];
+          var totalEmi = s.total_installment || s.scheduled_emi || 0;
+          var principal = s.principal_component || s.scheduled_emi || 0;
+          var interest = s.interest_component || 0;
+          var paidDate = s.paid_date || s.actual_deduction_date || '';
+          return [s.loan_id, s.installment_number, s.due_date, principal, interest, totalEmi, s.status, paidDate];
         }));
       }
 
@@ -223,8 +227,27 @@ def save_config():
     webapp_url = request.form.get('google_sheets_webapp_url', '').strip()
     auto_sync = request.form.get('google_sheets_auto_sync') == 'on'
 
-    save_google_sheets_config(sheet_url, webapp_url, auto_sync)
-    flash('Google Sheets configuration saved successfully!', 'success')
+    if webapp_url:
+        if 'docs.google.com/spreadsheets' in webapp_url:
+            flash('Error: You entered a Google Spreadsheet link into the Web App URL field. Please deploy an Apps Script Web App (Extensions -> Apps Script -> Deploy -> New Deployment -> Web App) and paste the URL ending in /exec.', 'danger')
+            return redirect(url_for('google_sheets.index'))
+
+        if '/dev' in webapp_url:
+            webapp_url = webapp_url.replace('/dev', '/exec')
+            flash('Notice: Converted test /dev URL to production /exec URL.', 'info')
+
+        if not webapp_url.startswith('https://script.google.com/macros/s/'):
+            flash('Warning: The Web App URL should start with "https://script.google.com/macros/s/". Please verify your deployment.', 'warning')
+
+    try:
+        from flask import current_app
+        save_google_sheets_config(sheet_url, webapp_url, auto_sync)
+        if is_vercel() and not current_app.config.get('IS_POSTGRES'):
+            sync_to_blob()
+        flash('Google Sheets configuration saved successfully!', 'success')
+    except Exception as e:
+        flash(f'Failed to save configuration: {e}', 'danger')
+
     return redirect(url_for('google_sheets.index'))
 
 @google_sheets_bp.route('/google-sheets/sync-to-sheet', methods=['POST'])
