@@ -31,11 +31,28 @@ def get_google_sheets_config():
         'google_sheets_webapp_url',
         'google_sheets_auto_sync',
         'google_sheets_last_sync',
-        'google_sheets_last_status'
+        'google_sheets_last_status',
+        'google_sheets_webhook_token'
     ]
     for k in keys:
         s = SystemSetting.query.filter_by(key=k).first()
         settings[k] = s.value if s else ''
+        
+    # Auto-generate a secure random webhook token if one does not exist
+    if not settings.get('google_sheets_webhook_token'):
+        import secrets
+        gen_token = f"az_wh_{secrets.token_hex(16)}"
+        s = SystemSetting.query.filter_by(key='google_sheets_webhook_token').first()
+        if s:
+            s.value = gen_token
+        else:
+            db.session.add(SystemSetting(key='google_sheets_webhook_token', value=gen_token, description='Secure token for Google Sheets webhook authentication'))
+        try:
+            db.session.commit()
+            settings['google_sheets_webhook_token'] = gen_token
+        except Exception:
+            db.session.rollback()
+
     return settings
 
 def save_google_sheets_config(sheet_url, webapp_url, auto_sync):

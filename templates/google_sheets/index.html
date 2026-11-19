@@ -96,6 +96,17 @@
                     <div class="form-text">Generated after deploying the Apps Script Web App (instructions on the right).</div>
                 </div>
 
+                <div class="mb-3">
+                    <label class="form-label fw-bold">Webhook Security Token</label>
+                    <div class="input-group">
+                        <input type="text" class="form-control bg-light font-monospace small" value="{{ cfg.google_sheets_webhook_token }}" readonly>
+                        <button class="btn btn-outline-secondary" type="button" onclick="navigator.clipboard.writeText('{{ cfg.google_sheets_webhook_token }}')" title="Copy token">
+                            <i class="fa-regular fa-copy"></i>
+                        </button>
+                    </div>
+                    <div class="form-text">Shared secret token ensuring only authorized Google Apps Script triggers can invoke data sync.</div>
+                </div>
+
                 <div class="form-check form-switch mb-4">
                     <input class="form-check-input" type="checkbox" role="switch" name="google_sheets_auto_sync" id="google_sheets_auto_sync" {% if cfg.google_sheets_auto_sync == '1' %}checked{% endif %}>
                     <label class="form-check-label fw-bold" for="google_sheets_auto_sync">

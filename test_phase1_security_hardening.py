@@ -111,13 +111,24 @@ class TestPhase1SecurityHardening(unittest.TestCase):
         print("  [PASS] AJAX POST with X-CSRFToken header accepted (HTTP 200).")
 
     def test_05_csrf_exempt_webhook(self):
-        """Test that Google Sheets external webhook remains accessible without browser CSRF."""
-        print("\n[TEST 5] Verifying external Google Sheets webhook CSRF exemption...")
+        """Test that Google Sheets external webhook is exempt from browser CSRF and authenticated via secret token."""
+        print("\n[TEST 5] Verifying external Google Sheets webhook CSRF exemption & token authentication...")
         self.app.config['WTF_CSRF_ENABLED'] = True
-        # Webhook should NOT return 400 CSRF error
-        res = self.client.post('/api/google-sheets/webhook', json={'action': 'ping'})
-        self.assertNotEqual(res.status_code, 400, "Webhook must be @csrf.exempt and not fail with 400 CSRF error")
-        print(f"  [PASS] /api/google-sheets/webhook is exempt from CSRF (Status: {res.status_code}).")
+        
+        # 1. Unauthenticated request without token should be blocked with 401
+        res_unauth = self.client.post('/api/google-sheets/webhook', json={'action': 'ping'})
+        self.assertEqual(res_unauth.status_code, 401, f"Expected 401 Unauthorized without token, got {res_unauth.status_code}")
+        print("  [PASS] Webhook without secret token correctly rejected with HTTP 401 Unauthorized.")
+
+        # 2. Authenticated request with token passes authentication and is CSRF exempt
+        from utils.google_sheets_sync import get_google_sheets_config
+        with self.app.app_context():
+            token = get_google_sheets_config().get('google_sheets_webhook_token')
+
+        res_auth = self.client.post(f'/api/google-sheets/webhook?token={token}', json={'action': 'ping'})
+        self.assertNotEqual(res_auth.status_code, 400, "Webhook must be @csrf.exempt and not fail with 400 CSRF error")
+        self.assertNotEqual(res_auth.status_code, 401, "Webhook with valid token must not fail with 401")
+        print(f"  [PASS] /api/google-sheets/webhook authenticated with valid token & exempt from CSRF (Status: {res_auth.status_code}).")
 
     def test_06_login_rate_limiting(self):
         """Test that excessive login attempts trigger rate limiting (HTTP 429)."""

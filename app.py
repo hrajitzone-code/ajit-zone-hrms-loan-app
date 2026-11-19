@@ -111,11 +111,41 @@ def create_app(config_class=Config):
             ACTIONS_META=ACTIONS_META
         )
 
-    # Vercel Serverless Blob Persistence Synchronization on State Changes
+    # Health Check Endpoint
+    @app.route('/api/health')
+    def health_check():
+        from flask import jsonify
+        import time
+        start = time.time()
+        db_type = 'PostgreSQL' if app.config.get('IS_POSTGRES') else 'SQLite'
+        try:
+            db.session.execute(db.text('SELECT 1'))
+            latency_ms = round((time.time() - start) * 1000, 2)
+            return jsonify({
+                'status': 'healthy',
+                'database_type': db_type,
+                'database_connected': True,
+                'latency_ms': latency_ms,
+                'company': app.config.get('COMPANY_NAME')
+            }), 200
+        except Exception as e:
+            return jsonify({
+                'status': 'degraded',
+                'database_type': db_type,
+                'database_connected': False,
+                'error': str(e)
+            }), 500
+
+    # Vercel Serverless Persistence Synchronization
     @app.after_request
     def auto_sync_to_blob(response):
         from flask import request
+        # If running on managed PostgreSQL, ACID persistence is already guaranteed in cloud database
+        if app.config.get('IS_POSTGRES'):
+            return response
+
         from utils.blob_db import sync_to_blob, is_vercel
+        import time
         if is_vercel() and request.method in ['POST', 'PUT', 'DELETE', 'PATCH']:
             if response.status_code < 400:
                 try:
@@ -123,7 +153,15 @@ def create_app(config_class=Config):
                 except Exception:
                     pass
                 try:
-                    sync_to_blob()
+                    # Retry with exponential backoff on transient network failures
+                    synced = False
+                    for attempt in range(1, 4):
+                        if sync_to_blob():
+                            synced = True
+                            break
+                        time.sleep(0.15 * attempt)
+                    if not synced:
+                        print("[BLOB AUTO-SYNC CRITICAL] Failed to upload database to blob after 3 attempts!", flush=True)
                 except Exception as e:
                     print(f"[BLOB AUTO-SYNC ERROR] {e}", flush=True)
         return response
@@ -133,19 +171,27 @@ def create_app(config_class=Config):
         os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
         os.makedirs(os.path.join(app.config['UPLOAD_FOLDER'], 'pdf'), exist_ok=True)
         os.makedirs(os.path.join(app.config['UPLOAD_FOLDER'], 'noc'), exist_ok=True)
-        os.makedirs(os.path.dirname(app.config['SQLALCHEMY_DATABASE_URI'].replace('sqlite:///', '')), exist_ok=True)
 
-        # On Vercel: sync cloud database from Vercel Blob or initialize from seed
-        is_vercel_env = os.environ.get('VERCEL') == '1' or os.environ.get('VERCEL_ENV') is not None
-        if is_vercel_env:
-            from utils.blob_db import sync_from_blob
-            target_tmp_db = '/tmp/loan_system.db'
-            synced = sync_from_blob(force=True)
-            if not synced or not os.path.exists(target_tmp_db) or os.path.getsize(target_tmp_db) == 0:
-                bundled_db = os.path.join(os.path.abspath(os.path.dirname(__file__)), 'instance', 'loan_system.db')
-                if os.path.exists(bundled_db):
-                    import shutil
-                    shutil.copyfile(bundled_db, target_tmp_db)
+        is_postgres_active = app.config.get('IS_POSTGRES', False)
+
+        if not is_postgres_active:
+            db_uri_str = app.config['SQLALCHEMY_DATABASE_URI']
+            if db_uri_str.startswith('sqlite:///'):
+                db_file = db_uri_str.replace('sqlite:///', '')
+                if os.path.dirname(db_file):
+                    os.makedirs(os.path.dirname(db_file), exist_ok=True)
+
+            # On Vercel with SQLite: sync cloud database from Vercel Blob or initialize from seed
+            is_vercel_env = os.environ.get('VERCEL') == '1' or os.environ.get('VERCEL_ENV') is not None
+            if is_vercel_env:
+                from utils.blob_db import sync_from_blob
+                target_tmp_db = '/tmp/loan_system.db'
+                synced = sync_from_blob(force=True)
+                if not synced or not os.path.exists(target_tmp_db) or os.path.getsize(target_tmp_db) == 0:
+                    bundled_db = os.path.join(os.path.abspath(os.path.dirname(__file__)), 'instance', 'loan_system.db')
+                    if os.path.exists(bundled_db):
+                        import shutil
+                        shutil.copyfile(bundled_db, target_tmp_db)
 
         db.create_all()
 

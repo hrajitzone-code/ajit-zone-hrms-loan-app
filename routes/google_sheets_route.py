@@ -299,10 +299,24 @@ def webhook_sync():
     """
     Webhook endpoint callable by Google Apps Script triggers to synchronize data
     whenever edits occur in Google Sheets.
+    Protected with shared secret authentication token verification.
     """
+    from flask import current_app
+    cfg = get_google_sheets_config()
+    expected_token = cfg.get('google_sheets_webhook_token') or os.environ.get('GOOGLE_SHEETS_WEBHOOK_SECRET')
+
+    if expected_token:
+        provided_token = (
+            request.headers.get('X-Webhook-Secret') or 
+            request.headers.get('X-Webhook-Token') or 
+            request.args.get('token')
+        )
+        if not provided_token or provided_token.strip() != expected_token.strip():
+            return jsonify({'success': False, 'error': 'Unauthorized: Invalid or missing webhook authentication token'}), 401
+
     try:
         res = pull_all_from_google_sheet()
-        if res.get('success') and is_vercel():
+        if res.get('success') and is_vercel() and not current_app.config.get('IS_POSTGRES'):
             sync_to_blob()
         return jsonify(res)
     except Exception as e:
