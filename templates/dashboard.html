@@ -8,14 +8,26 @@
 <!-- ==================================================== -->
 <!-- 1. EMPLOYEE ROLE DASHBOARD VIEW                      -->
 <!-- ==================================================== -->
-<div class="d-flex justify-content-between align-items-center mb-4">
+<div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
     <div>
         <h3 class="fw-bold mb-0">Employee Self-Service Dashboard</h3>
-        <p class="text-muted small">Welcome, {{ session.get('full_name') }} | {{ COMPANY_NAME }}</p>
+        <div class="d-flex align-items-center gap-2 mt-1">
+            <p class="text-muted small mb-0">Welcome, {{ session.get('full_name') }} | {{ COMPANY_NAME }}</p>
+            {% if last_updated %}
+            <span class="badge bg-light text-secondary border small">
+                <i class="fa-regular fa-clock me-1"></i> Last Updated: {{ last_updated }}
+            </span>
+            {% endif %}
+        </div>
     </div>
-    <a href="{{ url_for('loan.create') }}" class="btn btn-brand shadow-sm">
-        <i class="fa-solid fa-plus me-1"></i> Apply New Loan
-    </a>
+    <div class="d-flex gap-2">
+        <a href="{{ url_for('dashboard.index', refresh=1) }}" class="btn btn-outline-primary shadow-sm" title="Refresh">
+            <i class="fa-solid fa-arrows-rotate me-1"></i> Refresh
+        </a>
+        <a href="{{ url_for('loan.create') }}" class="btn btn-brand shadow-sm">
+            <i class="fa-solid fa-plus me-1"></i> Apply New Loan
+        </a>
+    </div>
 </div>
 
 <div class="row g-3 mb-4">
@@ -97,12 +109,22 @@
 <!-- ==================================================== -->
 <!-- 2. FINANCE / PAYROLL ROLE DASHBOARD VIEW             -->
 <!-- ==================================================== -->
-<div class="d-flex justify-content-between align-items-center mb-4">
+<div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
     <div>
         <h3 class="fw-bold mb-0">Finance & Payroll Executive Dashboard</h3>
-        <p class="text-muted small">Monitor monthly payroll EMI deductions & salary sheet synchronization for {{ COMPANY_NAME }}</p>
+        <div class="d-flex align-items-center gap-2 mt-1">
+            <p class="text-muted small mb-0">Monitor monthly payroll EMI deductions & salary sheet synchronization for {{ COMPANY_NAME }}</p>
+            {% if last_updated %}
+            <span class="badge bg-light text-secondary border small">
+                <i class="fa-regular fa-clock me-1"></i> Last Updated: {{ last_updated }}
+            </span>
+            {% endif %}
+        </div>
     </div>
     <div class="d-flex gap-2">
+        <a href="{{ url_for('dashboard.index', refresh=1) }}" class="btn btn-outline-primary shadow-sm" title="Refresh">
+            <i class="fa-solid fa-arrows-rotate me-1"></i> Refresh
+        </a>
         <a href="{{ url_for('salary.index') }}" class="btn btn-brand">
             <i class="fa-solid fa-sync me-1"></i> Salary Sheet Integration
         </a>
@@ -181,13 +203,23 @@
 <!-- ==================================================== -->
 <!-- 3. HR / ADMIN / MANAGER EXECUTIVE DASHBOARD VIEW     -->
 <!-- ==================================================== -->
-<div class="d-flex justify-content-between align-items-center mb-4">
+<div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
     <div>
         <h3 class="fw-bold mb-0">Executive Loan & EMI Dashboard</h3>
-        <p class="text-muted small">Real-time overview for {{ COMPANY_NAME }}</p>
+        <div class="d-flex align-items-center gap-2 mt-1">
+            <p class="text-muted small mb-0">Real-time overview for {{ COMPANY_NAME }}</p>
+            {% if last_updated %}
+            <span class="badge bg-light text-secondary border small">
+                <i class="fa-regular fa-clock me-1"></i> Last Updated: {{ last_updated }}
+            </span>
+            {% endif %}
+        </div>
     </div>
-    <div>
-        <a href="{{ url_for('loan.create') }}" class="btn btn-brand shadow-sm me-2">
+    <div class="d-flex gap-2">
+        <a href="{{ url_for('dashboard.index', refresh=1) }}" class="btn btn-outline-primary shadow-sm" title="Refresh & Sync Cloud Database">
+            <i class="fa-solid fa-arrows-rotate me-1"></i> Refresh Data
+        </a>
+        <a href="{{ url_for('loan.create') }}" class="btn btn-brand shadow-sm">
             <i class="fa-solid fa-plus me-1"></i> New Loan Application
         </a>
         <a href="{{ url_for('employee.import_excel') }}" class="btn btn-outline-secondary shadow-sm">
@@ -198,41 +230,44 @@
 
 <!-- Key Stat Counters Grid -->
 <div class="row g-3 mb-4">
-    <div class="col-md-4 col-lg-3">
+    <!-- Stat 1: Total Loan Applications -->
+    <div class="col-md-6 col-lg-3">
         <div class="stat-card">
             <div class="d-flex justify-content-between align-items-center">
                 <div>
-                    <span class="stat-label">Active Loans</span>
-                    <h3 class="stat-value text-primary">{{ stats.active_loans }}</h3>
+                    <span class="stat-label">Total Applications</span>
+                    <h3 class="stat-value text-primary">{{ stats.total_applications }}</h3>
                 </div>
                 <div class="stat-icon-wrapper stat-icon-blue">
-                    <i class="fa-solid fa-file-contract"></i>
+                    <i class="fa-solid fa-file-invoice-dollar"></i>
                 </div>
             </div>
             <div class="mt-2 text-muted small">
-                <span>Closed: {{ stats.closed_loans }}</span> | <span>Pending: {{ stats.pending_apps }}</span>
+                <span class="text-warning fw-bold">Pending: {{ stats.pending_apps }}</span> | <span>Approved: {{ stats.active_loans }}</span> | <span>Closed: {{ stats.closed_loans }}</span>
             </div>
         </div>
     </div>
 
-    <div class="col-md-4 col-lg-3">
+    <!-- Stat 2: Total Loan Amount Requested & Disbursed -->
+    <div class="col-md-6 col-lg-3">
         <div class="stat-card">
             <div class="d-flex justify-content-between align-items-center">
                 <div>
                     <span class="stat-label">Total Loan Amount</span>
-                    <h3 class="stat-value">{{ stats.total_loan_amount | inr }}</h3>
+                    <h3 class="stat-value text-dark">{{ stats.total_loan_amount | inr }}</h3>
                 </div>
                 <div class="stat-icon-wrapper stat-icon-purple">
                     <i class="fa-solid fa-coins"></i>
                 </div>
             </div>
             <div class="mt-2 text-muted small">
-                <span>Total Employees: {{ stats.total_employees }}</span>
+                <span class="text-warning fw-bold">Pending: {{ stats.pending_loan_amount | inr }}</span>
             </div>
         </div>
     </div>
 
-    <div class="col-md-4 col-lg-3">
+    <!-- Stat 3: Total Recovered -->
+    <div class="col-md-6 col-lg-3">
         <div class="stat-card">
             <div class="d-flex justify-content-between align-items-center">
                 <div>
@@ -249,7 +284,8 @@
         </div>
     </div>
 
-    <div class="col-md-4 col-lg-3">
+    <!-- Stat 4: Total Outstanding Principal -->
+    <div class="col-md-6 col-lg-3">
         <div class="stat-card">
             <div class="d-flex justify-content-between align-items-center">
                 <div>
@@ -261,7 +297,7 @@
                 </div>
             </div>
             <div class="mt-2 text-muted small">
-                <span class="text-danger font-weight-bold">Balance Principal</span>
+                <span class="text-danger font-weight-bold">Active Principal Balance</span>
             </div>
         </div>
     </div>
