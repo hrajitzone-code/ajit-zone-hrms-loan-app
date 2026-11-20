@@ -136,6 +136,21 @@ def create_app(config_class=Config):
                 'error': str(e)
             }), 500
 
+    # Vercel Serverless Persistence: Sync from Blob before handling requests
+    @app.before_request
+    def ensure_blob_synced():
+        from flask import request
+        if app.config.get('IS_POSTGRES'):
+            return
+        if request.path.startswith('/static/'):
+            return
+        from utils.blob_db import sync_from_blob, is_vercel
+        if is_vercel():
+            try:
+                sync_from_blob()
+            except Exception as e:
+                print(f"[BLOB BEFORE-REQUEST SYNC ERROR] {e}", flush=True)
+
     # Vercel Serverless Persistence Synchronization
     @app.after_request
     def auto_sync_to_blob(response):

@@ -21,7 +21,12 @@ def calculate_emi_schedule(loan_amount, monthly_emi, start_date, deduction_day=5
         start_date = datetime.strptime(start_date, '%Y-%m-%d').date()
 
     if not tenure_months or tenure_months <= 0:
-        tenure_months = math.ceil(loan_amount / monthly_emi)
+        if monthly_emi and monthly_emi > 0:
+            tenure_months = math.ceil(loan_amount / monthly_emi)
+        else:
+            tenure_months = 12
+    if not monthly_emi or monthly_emi <= 0:
+        monthly_emi = round(loan_amount / tenure_months, 2)
 
     schedule = []
     accumulated_emi = 0.0

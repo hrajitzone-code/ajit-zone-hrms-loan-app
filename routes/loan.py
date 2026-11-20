@@ -64,6 +64,17 @@ def create():
         remarks = request.form.get('remarks', '').strip()
         declaration = request.form.get('declaration_accepted') == 'on'
 
+        # Auto-compute EMI or tenure if either is omitted or zero
+        if loan_amount > 0:
+            if (not tenure_months or tenure_months <= 0) and (not monthly_emi or monthly_emi <= 0):
+                tenure_months = 12
+                monthly_emi = round(loan_amount / 12, 2)
+            elif (not tenure_months or tenure_months <= 0) and monthly_emi > 0:
+                import math
+                tenure_months = math.ceil(loan_amount / monthly_emi)
+            elif tenure_months > 0 and (not monthly_emi or monthly_emi <= 0):
+                monthly_emi = round(loan_amount / tenure_months, 2)
+
         employee = Employee.query.filter_by(emp_id=emp_id).first()
         if not employee:
             flash(f"Employee with ID '{emp_id}' not found. Please select an employee from the master dropdown or add them in Employee Master first.", 'danger')
@@ -156,6 +167,9 @@ def create():
 @login_required
 @permission_required('loans', 'view')
 def view_loan(loan_id):
+    from utils.blob_db import sync_from_blob, is_vercel
+    if is_vercel():
+        sync_from_blob()
     loan = Loan.query.get_or_404(loan_id)
     employee = loan.employee
 
@@ -172,6 +186,9 @@ def view_loan(loan_id):
 @login_required
 @permission_required('loan_applications', 'approve')
 def approve_loan(loan_id):
+    from utils.blob_db import sync_from_blob, is_vercel
+    if is_vercel():
+        sync_from_blob(force=True)
     loan = Loan.query.get_or_404(loan_id)
     action = request.form.get('action', 'approve')
     approval_remarks = request.form.get('approval_remarks', '').strip()
@@ -184,6 +201,16 @@ def approve_loan(loan_id):
         loan.approved_by_id = g.user.id
         if approval_remarks:
             loan.remarks = (loan.remarks or '') + f"\n[Approval Note]: {approval_remarks}"
+
+        # Ensure tenure and monthly_emi are valid before generating schedule
+        import math
+        if not loan.tenure_months or loan.tenure_months <= 0:
+            if loan.monthly_emi and loan.monthly_emi > 0:
+                loan.tenure_months = math.ceil(loan.loan_amount / loan.monthly_emi)
+            else:
+                loan.tenure_months = 12
+        if not loan.monthly_emi or loan.monthly_emi <= 0:
+            loan.monthly_emi = round(loan.loan_amount / loan.tenure_months, 2)
 
         schedule_res = calculate_emi_schedule(
             loan_amount=loan.loan_amount,

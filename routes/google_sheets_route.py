@@ -254,6 +254,8 @@ def save_config():
 @login_required
 @permission_required('settings', 'manage')
 def sync_to_sheet():
+    if is_vercel():
+        sync_from_blob(force=True)
     cfg = get_google_sheets_config()
     webapp_url = cfg.get('google_sheets_webapp_url')
 
@@ -273,6 +275,8 @@ def sync_to_sheet():
 @login_required
 @permission_required('settings', 'manage')
 def sync_from_sheet():
+    if is_vercel():
+        sync_from_blob(force=True)
     cfg = get_google_sheets_config()
     webapp_url = cfg.get('google_sheets_webapp_url')
 
@@ -295,6 +299,8 @@ def sync_from_sheet():
 @login_required
 @permission_required('settings', 'manage')
 def test_connection():
+    if is_vercel():
+        sync_from_blob(force=True)
     webapp_url = request.form.get('webapp_url', '').strip()
     if not webapp_url:
         cfg = get_google_sheets_config()
