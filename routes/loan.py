@@ -11,9 +11,33 @@ import os
 loan_bp = Blueprint('loan', __name__)
 
 def generate_next_loan_id():
+    """
+    Safely generates the next unique, sequential loan ID (e.g. 'LN-2026-0027').
+    Extracts the maximum numeric suffix from all existing loans for the current year
+    to prevent UNIQUE constraint collisions when earlier loan records have been deleted.
+    """
+    if is_vercel():
+        sync_from_blob()
     year = datetime.now().year
-    count = Loan.query.count() + 1
-    return f"LN-{year}-{count:04d}"
+    prefix = f"LN-{year}-"
+    
+    existing_records = db.session.query(Loan.loan_id).filter(Loan.loan_id.like(f"{prefix}%")).all()
+    max_num = 0
+    for (lid,) in existing_records:
+        if lid and lid.startswith(prefix):
+            suffix = lid[len(prefix):]
+            if suffix.isdigit():
+                max_num = max(max_num, int(suffix))
+                
+    next_num = max_num + 1
+    candidate = f"{prefix}{next_num:04d}"
+    
+    # Extra defense: scan forward if candidate exists in session or database
+    while Loan.query.filter_by(loan_id=candidate).first():
+        next_num += 1
+        candidate = f"{prefix}{next_num:04d}"
+        
+    return candidate
 
 @loan_bp.route('/loans')
 @login_required
@@ -52,9 +76,12 @@ def index():
 @login_required
 @permission_required('loan_applications', 'add')
 def create():
+    if is_vercel():
+        sync_from_blob(force=request.method == 'POST')
+
     if request.method == 'POST':
         emp_id = request.form.get('employee_id_input', '').strip()
-        loan_type = request.form.get('loan_type', '').strip()
+        loan_type = request.form.get('loan_type', '').strip() or 'Personal Loan'
         loan_amount = request.form.get('loan_amount', 0.0, type=float)
         monthly_emi = request.form.get('monthly_emi', 0.0, type=float)
         tenure_months = request.form.get('tenure_months', 12, type=int)
@@ -65,21 +92,47 @@ def create():
         remarks = request.form.get('remarks', '').strip()
         declaration = request.form.get('declaration_accepted') == 'on'
 
+        # Validation 1: Employee ID must be provided
+        if not emp_id:
+            flash("Please choose or enter an Employee ID.", 'danger')
+            employees = Employee.query.filter_by(status='Active').order_by(Employee.name.asc()).all()
+            return render_template('loans/create.html',
+                                   next_loan_id=generate_next_loan_id(),
+                                   employees=employees,
+                                   default_emp_id=emp_id,
+                                   form_data=request.form,
+                                   today_date=date.today().strftime('%Y-%m-%d'))
+
+        # Validation 2: Loan amount must be greater than 0
+        if not loan_amount or loan_amount <= 0:
+            flash("Loan amount must be greater than ₹0.00.", 'danger')
+            employees = Employee.query.filter_by(status='Active').order_by(Employee.name.asc()).all()
+            return render_template('loans/create.html',
+                                   next_loan_id=generate_next_loan_id(),
+                                   employees=employees,
+                                   default_emp_id=emp_id,
+                                   form_data=request.form,
+                                   today_date=date.today().strftime('%Y-%m-%d'))
+
         # Auto-compute EMI or tenure if either is omitted or zero
-        if loan_amount > 0:
-            if (not tenure_months or tenure_months <= 0) and (not monthly_emi or monthly_emi <= 0):
-                tenure_months = 12
-                monthly_emi = round(loan_amount / 12, 2)
-            elif (not tenure_months or tenure_months <= 0) and monthly_emi > 0:
-                import math
-                tenure_months = math.ceil(loan_amount / monthly_emi)
-            elif tenure_months > 0 and (not monthly_emi or monthly_emi <= 0):
-                monthly_emi = round(loan_amount / tenure_months, 2)
+        if (not tenure_months or tenure_months <= 0) and (not monthly_emi or monthly_emi <= 0):
+            tenure_months = 12
+            monthly_emi = round(loan_amount / 12, 2)
+        elif (not tenure_months or tenure_months <= 0) and monthly_emi > 0:
+            import math
+            tenure_months = max(1, math.ceil(loan_amount / monthly_emi))
+        elif tenure_months > 0 and (not monthly_emi or monthly_emi <= 0):
+            monthly_emi = round(loan_amount / max(1, tenure_months), 2)
+
+        if not tenure_months or tenure_months <= 0:
+            tenure_months = 12
+        if not monthly_emi or monthly_emi <= 0:
+            monthly_emi = round(loan_amount / tenure_months, 2)
 
         employee = Employee.query.filter_by(emp_id=emp_id).first()
         if not employee:
             flash(f"Employee with ID '{emp_id}' not found. Please select an employee from the master dropdown or add them in Employee Master first.", 'danger')
-            employees = Employee.query.filter_by(status='Active').all()
+            employees = Employee.query.filter_by(status='Active').order_by(Employee.name.asc()).all()
             return render_template('loans/create.html',
                                    next_loan_id=generate_next_loan_id(),
                                    employees=employees,
@@ -99,44 +152,70 @@ def create():
             for err in eligibility['errors']:
                 flash(f"Eligibility Warning: {err}", 'danger')
 
-        start_date = datetime.strptime(start_date_str, '%Y-%m-%d').date() if start_date_str else date.today()
-        loan_id_code = generate_next_loan_id()
+        try:
+            start_date = datetime.strptime(start_date_str, '%Y-%m-%d').date() if start_date_str else date.today()
+        except (ValueError, TypeError):
+            start_date = date.today()
 
-        loan = Loan(
-            loan_id=loan_id_code,
-            employee_id=employee.id,
-            loan_type=loan_type,
-            loan_amount=loan_amount,
-            monthly_emi=monthly_emi,
-            interest_rate=interest_rate,
-            emi_start_date=start_date,
-            emi_deduction_day=deduction_day,
-            tenure_months=tenure_months,
-            reason=reason,
-            remarks=remarks,
-            declaration_accepted=declaration,
-            approval_status='Pending',
-            loan_status='Pending',
-            workflow_status='Submitted',
-            total_recovered=0.0,
-            outstanding_balance=loan_amount
-        )
-        db.session.add(loan)
-        db.session.flush()
+        # Uniqueness guarantee with retry loop against race conditions
+        max_retries = 5
+        loan = None
+        loan_id_code = None
+
+        for attempt in range(max_retries):
+            loan_id_code = generate_next_loan_id()
+            loan = Loan(
+                loan_id=loan_id_code,
+                employee_id=employee.id,
+                loan_type=loan_type,
+                loan_amount=loan_amount,
+                monthly_emi=monthly_emi,
+                interest_rate=interest_rate,
+                emi_start_date=start_date,
+                emi_deduction_day=deduction_day,
+                tenure_months=tenure_months,
+                reason=reason,
+                remarks=remarks,
+                declaration_accepted=declaration,
+                approval_status='Pending',
+                loan_status='Pending',
+                workflow_status='Submitted',
+                total_recovered=0.0,
+                outstanding_balance=loan_amount
+            )
+            try:
+                db.session.add(loan)
+                db.session.flush()
+                break
+            except Exception as flush_err:
+                db.session.rollback()
+                if attempt == max_retries - 1:
+                    current_app.logger.error(f"Failed to allocate unique loan_id after {max_retries} attempts: {flush_err}")
+                    flash(f"Database error allocating loan ID: {flush_err}", 'danger')
+                    employees = Employee.query.filter_by(status='Active').order_by(Employee.name.asc()).all()
+                    return render_template('loans/create.html',
+                                           next_loan_id=generate_next_loan_id(),
+                                           employees=employees,
+                                           default_emp_id=emp_id,
+                                           form_data=request.form,
+                                           today_date=date.today().strftime('%Y-%m-%d'))
 
         if 'document' in request.files:
             file = request.files['document']
             if file and file.filename != '':
-                file_path = os.path.join(current_app.config['UPLOAD_FOLDER'], f"{loan_id_code}_{file.filename}")
-                os.makedirs(current_app.config['UPLOAD_FOLDER'], exist_ok=True)
-                file.save(file_path)
-                
-                doc_record = LoanDocument(
-                    loan_id=loan.id,
-                    document_name=file.filename,
-                    file_path=file_path
-                )
-                db.session.add(doc_record)
+                try:
+                    file_path = os.path.join(current_app.config['UPLOAD_FOLDER'], f"{loan_id_code}_{file.filename}")
+                    os.makedirs(current_app.config['UPLOAD_FOLDER'], exist_ok=True)
+                    file.save(file_path)
+                    
+                    doc_record = LoanDocument(
+                        loan_id=loan.id,
+                        document_name=file.filename,
+                        file_path=file_path
+                    )
+                    db.session.add(doc_record)
+                except Exception as doc_err:
+                    current_app.logger.warning(f"Failed to save document attachment: {doc_err}")
 
         audit = AuditLog(
             user_id=g.user.id,
@@ -146,22 +225,38 @@ def create():
             module='Loans',
             record_id=loan_id_code,
             new_value=f"Submitted loan application {loan_id_code} of ₹{loan_amount:,.2f} for {employee.name}",
-            reason="Loan Application Submission"
+            reason="Loan Application Submission",
+            ip_address=request.remote_addr
         )
         db.session.add(audit)
-        db.session.commit()
-        from utils.blob_db import sync_to_blob, is_vercel
+        try:
+            db.session.commit()
+        except Exception as commit_err:
+            db.session.rollback()
+            current_app.logger.error(f"Database commit failed on loan creation: {commit_err}")
+            flash(f"Failed to save loan application: {str(commit_err)}", 'danger')
+            employees = Employee.query.filter_by(status='Active').order_by(Employee.name.asc()).all()
+            return render_template('loans/create.html',
+                                   next_loan_id=generate_next_loan_id(),
+                                   employees=employees,
+                                   default_emp_id=emp_id,
+                                   form_data=request.form,
+                                   today_date=date.today().strftime('%Y-%m-%d'))
+
         if is_vercel():
             sync_to_blob()
-        trigger_auto_sync_if_enabled()
+        try:
+            trigger_auto_sync_if_enabled()
+        except Exception as g_err:
+            current_app.logger.warning(f"Google Sheets auto-sync notice: {g_err}")
 
         flash(f"Loan Application {loan_id_code} submitted successfully and under review!", 'success')
         return redirect(url_for('loan.index'))
 
     next_loan_id = generate_next_loan_id()
-    employees = Employee.query.filter_by(status='Active').all()
+    employees = Employee.query.filter_by(status='Active').order_by(Employee.name.asc()).all()
 
-    default_emp_id = ""
+    default_emp_id = request.args.get('emp_id', '')
     if g.user and g.user.role == 'Employee' and g.user.employee:
         default_emp_id = g.user.employee.emp_id
 
