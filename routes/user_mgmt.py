@@ -2,6 +2,7 @@ from flask import Blueprint, render_template, request, redirect, url_for, flash,
 from models import db, User, Employee, AuditLog
 from routes.auth import login_required, superadmin_required
 from utils.permissions import MODULES_DEF, ACTIONS_META, get_default_role_permissions
+from utils.blob_db import sync_to_blob, is_vercel
 from datetime import datetime
 import json
 
@@ -31,6 +32,7 @@ def index():
     search_q = request.args.get('q', '').strip()
     role_filter = request.args.get('role', '').strip()
     active_tab = request.args.get('tab', 'users').strip()
+    selected_user_id = request.args.get('selected_user', type=int)
 
     query = User.query
 
@@ -65,6 +67,7 @@ def index():
         search_q=search_q,
         selected_role=role_filter,
         active_tab=active_tab,
+        selected_user_id=selected_user_id,
         activity_logs=activity_logs,
         modules_def=MODULES_DEF,
         actions_meta=ACTIONS_META,
@@ -122,6 +125,8 @@ def create_user():
     )
     db.session.add(audit)
     db.session.commit()
+    if is_vercel():
+        sync_to_blob()
 
     flash(f"User account '{username}' ({full_name}) created successfully with role '{role}'!", 'success')
     return redirect(url_for('user_mgmt.index', tab='users'))
@@ -168,6 +173,8 @@ def edit_user(user_id):
     )
     db.session.add(audit)
     db.session.commit()
+    if is_vercel():
+        sync_to_blob()
 
     flash(f"User '{target_user.username}' updated successfully!", 'success')
     return redirect(url_for('user_mgmt.index', tab='users'))
@@ -199,6 +206,8 @@ def reset_password(user_id):
     )
     db.session.add(audit)
     db.session.commit()
+    if is_vercel():
+        sync_to_blob()
 
     flash(f"Password for user '{target_user.username}' has been reset successfully!", 'success')
     return redirect(url_for('user_mgmt.index', tab='users'))
@@ -234,6 +243,8 @@ def toggle_status(user_id):
     )
     db.session.add(audit)
     db.session.commit()
+    if is_vercel():
+        sync_to_blob()
 
     status_str = "Activated" if target_user.is_active else "Deactivated"
     flash(f"User account '{target_user.username}' has been {status_str}!", 'info')
@@ -277,6 +288,8 @@ def delete_user(user_id):
     )
     db.session.add(audit)
     db.session.commit()
+    if is_vercel():
+        sync_to_blob()
 
     flash(f"User account '{username}' ({full_name}) has been permanently deleted.", 'success')
     return redirect(url_for('user_mgmt.index', tab='users'))
@@ -327,16 +340,19 @@ def update_permissions(user_id):
     )
     db.session.add(audit)
     db.session.commit()
+    if is_vercel():
+        sync_to_blob()
 
     if request.is_json:
         return jsonify({
             'success': True,
-            'message': f"Custom permissions matrix for user '{target_user.username}' saved successfully!",
+            'message': f"Custom metric & permissions matrix for user '{target_user.username}' saved successfully!",
             'permissions': custom_perms
         })
 
-    flash(f"Custom module permissions for '{target_user.username}' updated successfully!", 'success')
-    return redirect(url_for('user_mgmt.index', tab='matrix'))
+    flash(f"Custom metric & permissions for '{target_user.username}' saved successfully!", 'success')
+    tab = request.form.get('active_tab', 'users')
+    return redirect(url_for('user_mgmt.index', tab=tab))
 
 @user_mgmt_bp.route('/users/<int:user_id>/reset-permissions', methods=['POST'])
 @login_required
@@ -360,9 +376,18 @@ def reset_permissions_to_default(user_id):
     )
     db.session.add(audit)
     db.session.commit()
+    if is_vercel():
+        sync_to_blob()
+
+    if request.is_json:
+        return jsonify({
+            'success': True,
+            'message': f"Custom metric & permissions for '{target_user.username}' reset to standard '{target_user.role}' defaults."
+        })
 
     flash(f"Permissions for '{target_user.username}' reset to standard '{target_user.role}' defaults.", 'info')
-    return redirect(url_for('user_mgmt.index', tab='matrix'))
+    tab = request.form.get('active_tab', 'users')
+    return redirect(url_for('user_mgmt.index', tab=tab))
 
 @user_mgmt_bp.route('/users/<int:user_id>/permissions/json')
 @login_required

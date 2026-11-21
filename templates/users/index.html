@@ -199,7 +199,7 @@
                                 </span>
                                 {% elif u.permissions %}
                                 <span class="badge bg-primary-subtle text-primary border border-primary">
-                                    <i class="fa-solid fa-sliders me-1"></i>Custom Matrix Configured
+                                    <i class="fa-solid fa-sliders me-1"></i>Custom Matrix & Metric Configured
                                 </span>
                                 {% else %}
                                 <span class="badge bg-secondary-subtle text-secondary border">
@@ -255,12 +255,13 @@
                         <div class="modal fade" id="userPermModal{{ u.id }}" tabindex="-1">
                             <div class="modal-dialog modal-xl modal-dialog-scrollable">
                                 <div class="modal-content">
-                                    <form method="POST" action="{{ url_for('user_mgmt.update_permissions', user_id=u.id) }}">
+                                    <form id="userPermForm{{ u.id }}" method="POST" action="{{ url_for('user_mgmt.update_permissions', user_id=u.id) }}">
                                         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+                                        <input type="hidden" name="active_tab" value="users"/>
                                         <div class="modal-header bg-light">
                                             <div>
                                                 <h5 class="modal-title fw-bold mb-0">
-                                                    <i class="fa-solid fa-sliders me-2 text-primary"></i>Custom Permission Matrix: {{ u.username }} ({{ u.full_name }})
+                                                    <i class="fa-solid fa-sliders me-2 text-primary"></i>Custom Permission Matrix & Metric: {{ u.username }} ({{ u.full_name }})
                                                 </h5>
                                                 <small class="text-muted">Assigned Role: <strong>{{ u.role }}</strong> | Configure granular actions per module</small>
                                             </div>
@@ -354,16 +355,13 @@
                                         </div>
                                         <div class="modal-footer d-flex justify-content-between">
                                             {% if not (u.is_primary_superadmin or u.username == 'sakshi') %}
-                                            <form method="POST" action="{{ url_for('user_mgmt.reset_permissions_to_default', user_id=u.id) }}" class="d-inline">
-                                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
-                                                <button type="submit" class="btn btn-outline-secondary btn-sm" onclick="return confirm('Reset this user to standard role defaults?')">
-                                                    <i class="fa-solid fa-rotate-left me-1"></i>Reset to {{ u.role.replace('_', ' ') }} Defaults
-                                                </button>
-                                            </form>
+                                            <button type="submit" form="resetPermForm{{ u.id }}" class="btn btn-outline-secondary btn-sm" onclick="return confirm('Reset this user to standard role defaults?')">
+                                                <i class="fa-solid fa-rotate-left me-1"></i>Reset to {{ u.role.replace('_', ' ') }} Defaults
+                                            </button>
                                             <div>
                                                 <button type="button" class="btn btn-light" data-bs-dismiss="modal">Cancel</button>
-                                                <button type="submit" class="btn btn-primary px-4">
-                                                    <i class="fa-solid fa-floppy-disk me-1"></i>Save Custom Matrix
+                                                <button type="submit" form="userPermForm{{ u.id }}" id="saveCustomMetricBtn{{ u.id }}" class="btn btn-primary px-4" title="Save Custom Metric / Matrix">
+                                                    <i class="fa-solid fa-floppy-disk me-1"></i>Save Custom Metric
                                                 </button>
                                             </div>
                                             {% else %}
@@ -371,6 +369,12 @@
                                             {% endif %}
                                         </div>
                                     </form>
+                                    {% if not (u.is_primary_superadmin or u.username == 'sakshi') %}
+                                    <form id="resetPermForm{{ u.id }}" method="POST" action="{{ url_for('user_mgmt.reset_permissions_to_default', user_id=u.id) }}" style="display:none;">
+                                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+                                        <input type="hidden" name="active_tab" value="users"/>
+                                    </form>
+                                    {% endif %}
                                 </div>
                             </div>
                         </div>
@@ -500,7 +504,7 @@
                     <select id="matrixUserSelector" class="form-select" onchange="loadUserMatrix(this.value)">
                         <option value="">-- Choose User Account --</option>
                         {% for u in users %}
-                        <option value="{{ u.id }}" {% if loop.first and not (u.is_primary_superadmin or u.username == 'sakshi') %}selected{% endif %}>
+                        <option value="{{ u.id }}" {% if selected_user_id and selected_user_id == u.id %}selected{% elif not selected_user_id and loop.first and not (u.is_primary_superadmin or u.username == 'sakshi') %}selected{% endif %}>
                             {{ u.username }} - {{ u.full_name }} ({{ u.role }})
                         </option>
                         {% endfor %}
@@ -528,8 +532,8 @@
                     <small class="text-muted">Configure read/write/approve/manage capabilities individually for each module</small>
                 </div>
                 <div>
-                    <button type="button" class="btn btn-brand" onclick="saveActiveMatrix()">
-                        <i class="fa-solid fa-floppy-disk me-1"></i>Save Permissions Matrix
+                    <button type="button" class="btn btn-brand" id="saveActiveMatrixBtnTop" onclick="saveActiveMatrix()" title="Save Custom Metric / Matrix">
+                        <i class="fa-solid fa-floppy-disk me-1"></i>Save Custom Metric
                     </button>
                 </div>
             </div>
@@ -589,8 +593,8 @@
             </div>
 
             <div class="p-3 border-top text-end bg-light">
-                <button type="button" class="btn btn-brand px-4" onclick="saveActiveMatrix()">
-                    <i class="fa-solid fa-floppy-disk me-1"></i>Save Permissions Matrix
+                <button type="button" class="btn btn-brand px-4" id="saveActiveMatrixBtn" onclick="saveActiveMatrix()" title="Save Custom Metric / Matrix">
+                    <i class="fa-solid fa-floppy-disk me-1"></i>Save Custom Metric
                 </button>
             </div>
         </div>
@@ -919,6 +923,16 @@ function saveActiveMatrix() {
         return;
     }
 
+    const buttons = [
+        document.getElementById('saveActiveMatrixBtnTop'),
+        document.getElementById('saveActiveMatrixBtn')
+    ].filter(Boolean);
+
+    buttons.forEach(btn => {
+        btn.disabled = true;
+        btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin me-1"></i>Saving Custom Metric...';
+    });
+
     const payload = {};
     document.querySelectorAll('.active-matrix-box:checked').forEach(b => {
         const mod = b.getAttribute('data-module');
@@ -927,36 +941,65 @@ function saveActiveMatrix() {
         payload[mod].push(act);
     });
 
+    const metaCsrf = document.querySelector('meta[name="csrf-token"]');
+    const csrfToken = metaCsrf ? metaCsrf.getAttribute('content') : '{{ csrf_token() }}';
+
     fetch(`/users/${activeUserId}/permissions`, {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json',
             'X-Requested-With': 'XMLHttpRequest',
-            'X-CSRFToken': '{{ csrf_token() }}'
+            'X-CSRFToken': csrfToken
         },
         body: JSON.stringify({ permissions: payload })
     })
-    .then(res => res.json())
+    .then(async res => {
+        const data = await res.json().catch(() => null);
+        if (!res.ok) {
+            throw new Error((data && data.message) ? data.message : `Server error: HTTP ${res.status}`);
+        }
+        return data;
+    })
     .then(res => {
-        if (res.success) {
-            alert(res.message);
-            window.location.reload();
+        if (res && res.success) {
+            alert(res.message || 'Custom metric saved successfully!');
+            window.location.href = `/users?tab=matrix&selected_user=${activeUserId}`;
         } else {
-            alert('Failed to save permissions.');
+            alert((res && res.message) ? res.message : 'Failed to save custom metric.');
+            buttons.forEach(btn => {
+                btn.disabled = false;
+                btn.innerHTML = '<i class="fa-solid fa-floppy-disk me-1"></i>Save Custom Metric';
+            });
         }
     })
     .catch(err => {
-        console.error('Error saving matrix:', err);
-        alert('An error occurred while saving.');
+        console.error('Error saving custom metric:', err);
+        alert(`An error occurred while saving: ${err.message}`);
+        buttons.forEach(btn => {
+            btn.disabled = false;
+            btn.innerHTML = '<i class="fa-solid fa-floppy-disk me-1"></i>Save Custom Metric';
+        });
     });
 }
 
-// Initialize first user if selected
+// Initialize and attach submission listeners
 document.addEventListener('DOMContentLoaded', function() {
     const selector = document.getElementById('matrixUserSelector');
     if (selector && selector.value) {
         loadUserMatrix(selector.value);
     }
+
+    // Modal forms submission visual indicator
+    document.querySelectorAll('form[id^="userPermForm"]').forEach(form => {
+        form.addEventListener('submit', function() {
+            const saveBtn = form.querySelector('button[type="submit"][id^="saveCustomMetricBtn"]') || 
+                            document.querySelector(`button[type="submit"][form="${form.id}"]`);
+            if (saveBtn) {
+                saveBtn.disabled = true;
+                saveBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin me-1"></i>Saving Custom Metric...';
+            }
+        });
+    });
 });
 </script>
 {% endblock %}
