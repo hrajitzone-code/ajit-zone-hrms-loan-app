@@ -257,6 +257,7 @@
                                 <div class="modal-content">
                                     <form id="userPermForm{{ u.id }}" method="POST" action="{{ url_for('user_mgmt.update_permissions', user_id=u.id) }}">
                                         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+                                        <input type="hidden" name="user_id" value="{{ u.id }}"/>
                                         <input type="hidden" name="active_tab" value="users"/>
                                         <div class="modal-header bg-light">
                                             <div>
@@ -372,6 +373,7 @@
                                     {% if not (u.is_primary_superadmin or u.username == 'sakshi') %}
                                     <form id="resetPermForm{{ u.id }}" method="POST" action="{{ url_for('user_mgmt.reset_permissions_to_default', user_id=u.id) }}" style="display:none;">
                                         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+                                        <input type="hidden" name="user_id" value="{{ u.id }}"/>
                                         <input type="hidden" name="active_tab" value="users"/>
                                     </form>
                                     {% endif %}
@@ -467,6 +469,7 @@
                                 <div class="modal-content">
                                     <form method="POST" action="{{ url_for('user_mgmt.delete_user', user_id=u.id) }}">
                                         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+                                        <input type="hidden" name="user_id" value="{{ u.id }}"/>
                                         <div class="modal-header bg-danger text-white">
                                             <h5 class="modal-title fw-bold"><i class="fa-solid fa-triangle-exclamation me-2"></i>Delete User Account</h5>
                                             <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
@@ -504,7 +507,7 @@
                     <select id="matrixUserSelector" class="form-select" onchange="loadUserMatrix(this.value)">
                         <option value="">-- Choose User Account --</option>
                         {% for u in users %}
-                        <option value="{{ u.id }}" {% if selected_user_id and selected_user_id == u.id %}selected{% elif not selected_user_id and loop.first and not (u.is_primary_superadmin or u.username == 'sakshi') %}selected{% endif %}>
+                        <option value="{{ u.id }}" {% if selected_user_id and selected_user_id == u.id %}selected{% elif not selected_user_id and not (u.is_primary_superadmin or u.username == 'sakshi') and u == (users | rejectattr('is_primary_superadmin') | rejectattr('username', 'equalto', 'sakshi') | first) %}selected{% endif %}>
                             {{ u.username }} - {{ u.full_name }} ({{ u.role }})
                         </option>
                         {% endfor %}
@@ -951,7 +954,10 @@ function saveActiveMatrix() {
             'X-Requested-With': 'XMLHttpRequest',
             'X-CSRFToken': csrfToken
         },
-        body: JSON.stringify({ permissions: payload })
+        body: JSON.stringify({
+            user_id: activeUserId,
+            permissions: payload
+        })
     })
     .then(async res => {
         const data = await res.json().catch(() => null);
@@ -992,14 +998,12 @@ document.addEventListener('DOMContentLoaded', function() {
     // Modal forms submission visual indicator
     document.querySelectorAll('form[id^="userPermForm"]').forEach(form => {
         form.addEventListener('submit', function() {
-            setTimeout(() => {
-                const saveBtn = form.querySelector('button[type="submit"][id^="saveCustomMetricBtn"]') || 
-                                document.querySelector(`button[type="submit"][form="${form.id}"]`);
-                if (saveBtn) {
-                    saveBtn.disabled = true;
-                    saveBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin me-1"></i>Saving Custom Metric...';
-                }
-            }, 10);
+            const saveBtn = form.querySelector('button[type="submit"][id^="saveCustomMetricBtn"]') || 
+                            document.querySelector(`button[type="submit"][form="${form.id}"]`);
+            if (saveBtn) {
+                saveBtn.disabled = true;
+                saveBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin me-1"></i>Saving Custom Metric...';
+            }
         });
     });
 });

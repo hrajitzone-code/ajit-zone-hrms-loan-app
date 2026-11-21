@@ -36,7 +36,6 @@ def index():
 
     if is_vercel():
         sync_from_blob(force=True)
-    db.session.remove()
     db.session.expire_all()
 
     query = User.query
@@ -141,7 +140,16 @@ def create_user():
 @superadmin_required
 def edit_user(user_id):
     """Edit user details, role assignment, and employee master link."""
-    target_user = User.query.get_or_404(user_id)
+    if is_vercel():
+        sync_from_blob(force=True)
+    db.session.expire_all()
+    target_user = User.query.get(user_id)
+    if not target_user and is_vercel():
+        sync_from_blob(force=True)
+        target_user = User.query.get(user_id)
+    if not target_user:
+        flash(f"User account #{user_id} was not found.", 'warning')
+        return redirect(url_for('user_mgmt.index', tab='users'))
     new_role = request.form.get('role', target_user.role).strip()
     full_name = request.form.get('full_name', target_user.full_name).strip()
     email = request.form.get('email', target_user.email).strip()
@@ -189,7 +197,16 @@ def edit_user(user_id):
 @superadmin_required
 def reset_password(user_id):
     """Reset user password directly from Super Admin console."""
-    target_user = User.query.get_or_404(user_id)
+    if is_vercel():
+        sync_from_blob(force=True)
+    db.session.expire_all()
+    target_user = User.query.get(user_id)
+    if not target_user and is_vercel():
+        sync_from_blob(force=True)
+        target_user = User.query.get(user_id)
+    if not target_user:
+        flash(f"User account #{user_id} was not found.", 'warning')
+        return redirect(url_for('user_mgmt.index', tab='users'))
     new_password = request.form.get('new_password', '')
 
     if not new_password:
@@ -222,7 +239,16 @@ def reset_password(user_id):
 @superadmin_required
 def toggle_status(user_id):
     """Activate or deactivate user account."""
-    target_user = User.query.get_or_404(user_id)
+    if is_vercel():
+        sync_from_blob(force=True)
+    db.session.expire_all()
+    target_user = User.query.get(user_id)
+    if not target_user and is_vercel():
+        sync_from_blob(force=True)
+        target_user = User.query.get(user_id)
+    if not target_user:
+        flash(f"User account #{user_id} was not found.", 'warning')
+        return redirect(url_for('user_mgmt.index', tab='users'))
 
     # Protect Primary Super Admin (Sakshi Shukla) from deactivation
     if target_user.is_primary_superadmin or target_user.username == 'sakshi':
@@ -256,11 +282,30 @@ def toggle_status(user_id):
     return redirect(url_for('user_mgmt.index', tab='users'))
 
 @user_mgmt_bp.route('/users/<int:user_id>/delete', methods=['POST'])
+@user_mgmt_bp.route('/users/delete', methods=['POST'])
 @login_required
 @superadmin_required
-def delete_user(user_id):
+def delete_user(user_id=None):
     """Safely delete a user account with Super Admin protection."""
-    target_user = User.query.get_or_404(user_id)
+    if is_vercel():
+        sync_from_blob(force=True)
+    db.session.expire_all()
+
+    if not user_id:
+        user_id = request.form.get('user_id', type=int) or request.args.get('user_id', type=int)
+
+    if not user_id:
+        flash('No user account specified for deletion.', 'warning')
+        return redirect(url_for('user_mgmt.index', tab='users'))
+
+    target_user = User.query.get(user_id)
+    if not target_user and is_vercel():
+        sync_from_blob(force=True)
+        target_user = User.query.get(user_id)
+
+    if not target_user:
+        flash(f"User account #{user_id} was not found or has already been deleted.", 'warning')
+        return redirect(url_for('user_mgmt.index', tab='users'))
 
     # Strictly protect Primary Super Admin (Sakshi Shukla)
     if target_user.is_primary_superadmin or target_user.username == 'sakshi':
@@ -299,30 +344,64 @@ def delete_user(user_id):
     flash(f"User account '{username}' ({full_name}) has been permanently deleted.", 'success')
     return redirect(url_for('user_mgmt.index', tab='users'))
 
-@user_mgmt_bp.route('/users/<int:user_id>/permissions', methods=['POST'])
+@user_mgmt_bp.route('/users/<int:user_id>/permissions', methods=['GET', 'POST'])
+@user_mgmt_bp.route('/users/permissions', methods=['GET', 'POST'])
+@user_mgmt_bp.route('/users/<int:user_id>/custom-metric', methods=['GET', 'POST'])
+@user_mgmt_bp.route('/users/custom-metric', methods=['GET', 'POST'])
+@user_mgmt_bp.route('/custom-metric', methods=['GET', 'POST'])
 @login_required
 @superadmin_required
-def update_permissions(user_id):
+def update_permissions(user_id=None):
     """
-    Save custom module-wise permissions matrix for an individual user.
+    Save custom module-wise permissions matrix / metric for an individual user.
     Supports both standard form submission and AJAX JSON payload.
     """
     if is_vercel():
         sync_from_blob(force=True)
     db.session.remove()
-    target_user = User.query.get_or_404(user_id)
+    db.session.expire_all()
+
+    # Resolve target user_id from path param, form data, JSON body, or query args
+    if not user_id:
+        user_id = request.form.get('user_id', type=int) or request.args.get('user_id', type=int) or request.args.get('selected_user', type=int)
+        if not user_id and request.is_json:
+            data = request.get_json(silent=True) or {}
+            user_id = data.get('user_id')
+
+    if not user_id:
+        if request.method == 'GET':
+            return redirect(url_for('user_mgmt.index', tab='matrix'))
+        if request.is_json:
+            return jsonify({'success': False, 'message': 'No target user account specified.'}), 400
+        flash('Please select a user account to configure custom permissions.', 'warning')
+        return redirect(url_for('user_mgmt.index', tab='matrix'))
+
+    # If GET request, safely redirect to the Matrix tab for this user instead of 404/405
+    if request.method == 'GET':
+        return redirect(url_for('user_mgmt.index', tab='matrix', selected_user=user_id))
+
+    target_user = User.query.get(user_id)
+    if not target_user and is_vercel():
+        sync_from_blob(force=True)
+        target_user = User.query.get(user_id)
+
+    if not target_user:
+        if request.is_json:
+            return jsonify({'success': False, 'message': f'User account #{user_id} was not found.'}), 404
+        flash(f"User account #{user_id} was not found. Please choose an active user account.", 'warning')
+        return redirect(url_for('user_mgmt.index', tab='users'))
 
     # If primary superadmin, inform that they automatically retain 100% full access
     if target_user.is_primary_superadmin or target_user.username == 'sakshi':
         if request.is_json:
             return jsonify({'success': True, 'message': 'Primary Super Admin (Sakshi Shukla) automatically has full access to all modules.'})
         flash('Primary Super Admin (Sakshi Shukla) has full access across all modules by default.', 'info')
-        return redirect(url_for('user_mgmt.index', tab='matrix'))
+        return redirect(url_for('user_mgmt.index', tab='matrix', selected_user=target_user.id))
 
     custom_perms = {}
 
     if request.is_json:
-        data = request.get_json() or {}
+        data = request.get_json(silent=True) or {}
         custom_perms = data.get('permissions', {})
     else:
         # Standard form post from matrix checkboxes
@@ -360,17 +439,43 @@ def update_permissions(user_id):
 
     flash(f"Custom metric & permissions for '{target_user.username}' saved successfully!", 'success')
     tab = request.form.get('active_tab', 'users')
-    return redirect(url_for('user_mgmt.index', tab=tab))
+    return redirect(url_for('user_mgmt.index', tab=tab, selected_user=target_user.id))
 
-@user_mgmt_bp.route('/users/<int:user_id>/reset-permissions', methods=['POST'])
+@user_mgmt_bp.route('/users/<int:user_id>/reset-permissions', methods=['GET', 'POST'])
+@user_mgmt_bp.route('/users/reset-permissions', methods=['GET', 'POST'])
 @login_required
 @superadmin_required
-def reset_permissions_to_default(user_id):
+def reset_permissions_to_default(user_id=None):
     """Reset custom permissions back to standard role defaults."""
     if is_vercel():
         sync_from_blob(force=True)
     db.session.remove()
-    target_user = User.query.get_or_404(user_id)
+    db.session.expire_all()
+
+    if not user_id:
+        user_id = request.form.get('user_id', type=int) or request.args.get('user_id', type=int) or request.args.get('selected_user', type=int)
+
+    if not user_id:
+        if request.method == 'GET':
+            return redirect(url_for('user_mgmt.index', tab='matrix'))
+        if request.is_json:
+            return jsonify({'success': False, 'message': 'No target user account specified.'}), 400
+        flash('Please select a user account to reset permissions.', 'warning')
+        return redirect(url_for('user_mgmt.index', tab='matrix'))
+
+    if request.method == 'GET':
+        return redirect(url_for('user_mgmt.index', tab='matrix', selected_user=user_id))
+
+    target_user = User.query.get(user_id)
+    if not target_user and is_vercel():
+        sync_from_blob(force=True)
+        target_user = User.query.get(user_id)
+
+    if not target_user:
+        if request.is_json:
+            return jsonify({'success': False, 'message': f'User account #{user_id} was not found.'}), 404
+        flash(f"User account #{user_id} was not found.", 'warning')
+        return redirect(url_for('user_mgmt.index', tab='users'))
 
     target_user.permissions = None
 
@@ -398,18 +503,33 @@ def reset_permissions_to_default(user_id):
 
     flash(f"Permissions for '{target_user.username}' reset to standard '{target_user.role}' defaults.", 'info')
     tab = request.form.get('active_tab', 'users')
-    return redirect(url_for('user_mgmt.index', tab=tab))
+    return redirect(url_for('user_mgmt.index', tab=tab, selected_user=target_user.id))
 
 @user_mgmt_bp.route('/users/<int:user_id>/permissions/json')
+@user_mgmt_bp.route('/users/permissions/json')
 @login_required
 @superadmin_required
-def get_user_permissions(user_id):
+def get_user_permissions(user_id=None):
     """API endpoint to fetch a user's current permissions JSON for dynamic UI modal loading."""
     if is_vercel():
         sync_from_blob(force=True)
     db.session.remove()
     db.session.expire_all()
-    target_user = User.query.get_or_404(user_id)
+
+    if not user_id:
+        user_id = request.args.get('user_id', type=int) or request.args.get('selected_user', type=int)
+
+    if not user_id:
+        return jsonify({'status': 'error', 'message': 'User ID required'}), 400
+
+    target_user = User.query.get(user_id)
+    if not target_user and is_vercel():
+        sync_from_blob(force=True)
+        target_user = User.query.get(user_id)
+
+    if not target_user:
+        return jsonify({'status': 'error', 'message': 'User not found'}), 404
+
     resp = jsonify({
         'status': 'success',
         'user_id': target_user.id,

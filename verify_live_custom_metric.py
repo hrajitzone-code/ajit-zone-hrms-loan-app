@@ -65,10 +65,10 @@ def main():
         print(f"    - 'Save Custom Metric' button present in DOM: {has_save_metric}")
         assert has_save_metric, "Save Custom Metric button must be rendered in HTML"
 
-        # Check for Pradeep Gothwal
-        m_user = re.search(r'id="userPermForm(\d+)"', users_html)
+        # Check for target user with editable permissions (e.g. Pradeep Gothwal)
+        m_user = re.search(r'id="saveCustomMetricBtn(\d+)"', users_html)
         if not m_user:
-            m_user = re.search(r'/users/(\d+)/permissions', users_html)
+            m_user = re.search(r'option value="(\d+)"[^>]*>[^<]*Manager', users_html)
         target_user_id = int(m_user.group(1)) if m_user else 7
         print(f"    - Target User ID for custom metric testing: {target_user_id}")
 
@@ -137,7 +137,7 @@ def main():
         print(f"    - Server response: {edit_json}")
         assert edit_json.get('success') is True, "Edit must return success: True"
 
-    time.sleep(1.0)
+    time.sleep(1.2)
 
     # Step 7: VERIFY EDITED METRIC IN CLOUD DATABASE
     req_verify_edit = urllib.request.Request(f"{BASE_URL}/users/{target_user_id}/permissions/json?_t={int(time.time()*1000)}", headers={
@@ -171,7 +171,7 @@ def main():
         print(f"    - Reset flash message: {reset_flash}")
         print(f"    - Badge returned to standard defaults: {badge_default}")
 
-    time.sleep(1.0)
+    time.sleep(1.2)
 
     # Step 9: VERIFY FINAL RESET IN DATABASE
     req_final = urllib.request.Request(f"{BASE_URL}/users/{target_user_id}/permissions/json?_t={int(time.time()*1000)}", headers={
