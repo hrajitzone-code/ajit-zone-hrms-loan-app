@@ -100,8 +100,9 @@ def main():
 
     # Step 5: REFRESH PAGE & VERIFY PERSISTENCE ACROSS SESSIONS / CONTAINERS
     print("\n--- TEST FLOW 2: REFRESH & PERSISTENCE VERIFICATION ---")
-    req_refresh = urllib.request.Request(f"{BASE_URL}/users/{target_user_id}/permissions/json", headers={
-        'User-Agent': 'Mozilla/5.0'
+    req_refresh = urllib.request.Request(f"{BASE_URL}/users/{target_user_id}/permissions/json?_t={int(time.time()*1000)}", headers={
+        'User-Agent': 'Mozilla/5.0',
+        'Cache-Control': 'no-cache, no-store'
     })
     with session.open(req_refresh) as resp:
         user_json = json.loads(resp.read().decode('utf-8'))
@@ -139,8 +140,9 @@ def main():
     time.sleep(1.0)
 
     # Step 7: VERIFY EDITED METRIC IN CLOUD DATABASE
-    req_verify_edit = urllib.request.Request(f"{BASE_URL}/users/{target_user_id}/permissions/json", headers={
-        'User-Agent': 'Mozilla/5.0'
+    req_verify_edit = urllib.request.Request(f"{BASE_URL}/users/{target_user_id}/permissions/json?_t={int(time.time()*1000)}", headers={
+        'User-Agent': 'Mozilla/5.0',
+        'Cache-Control': 'no-cache, no-store'
     })
     with session.open(req_verify_edit) as resp:
         edit_verify_json = json.loads(resp.read().decode('utf-8'))
@@ -172,8 +174,9 @@ def main():
     time.sleep(1.0)
 
     # Step 9: VERIFY FINAL RESET IN DATABASE
-    req_final = urllib.request.Request(f"{BASE_URL}/users/{target_user_id}/permissions/json", headers={
-        'User-Agent': 'Mozilla/5.0'
+    req_final = urllib.request.Request(f"{BASE_URL}/users/{target_user_id}/permissions/json?_t={int(time.time()*1000)}", headers={
+        'User-Agent': 'Mozilla/5.0',
+        'Cache-Control': 'no-cache, no-store'
     })
     with session.open(req_final) as resp:
         final_json = json.loads(resp.read().decode('utf-8'))

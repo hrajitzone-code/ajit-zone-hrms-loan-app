@@ -404,7 +404,7 @@ def get_user_permissions(user_id):
     db.session.remove()
     db.session.expire_all()
     target_user = User.query.get_or_404(user_id)
-    return jsonify({
+    resp = jsonify({
         'status': 'success',
         'user_id': target_user.id,
         'username': target_user.username,
@@ -415,3 +415,6 @@ def get_user_permissions(user_id):
         'has_custom_permissions': target_user.permissions is not None,
         'permissions': target_user.get_permissions()
     })
+    resp.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate, max-age=0'
+    resp.headers['Pragma'] = 'no-cache'
+    return resp

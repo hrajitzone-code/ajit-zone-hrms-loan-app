@@ -875,7 +875,7 @@ function loadUserMatrix(userId) {
     }
 
     activeUserId = userId;
-    fetch(`/users/${userId}/permissions/json`)
+    fetch(`/users/${userId}/permissions/json?_t=${Date.now()}`)
         .then(res => res.json())
         .then(data => {
             document.getElementById('matrixTargetHeading').innerText = `Matrix: ${data.username} (${data.full_name}) - Role: ${data.role}`;
