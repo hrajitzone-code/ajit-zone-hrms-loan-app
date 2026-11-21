@@ -2,7 +2,7 @@ from flask import Blueprint, render_template, request, redirect, url_for, flash,
 from models import db, User, Employee, AuditLog
 from routes.auth import login_required, superadmin_required
 from utils.permissions import MODULES_DEF, ACTIONS_META, get_default_role_permissions
-from utils.blob_db import sync_to_blob, is_vercel
+from utils.blob_db import sync_to_blob, sync_from_blob, is_vercel
 from datetime import datetime
 import json
 
@@ -33,6 +33,10 @@ def index():
     role_filter = request.args.get('role', '').strip()
     active_tab = request.args.get('tab', 'users').strip()
     selected_user_id = request.args.get('selected_user', type=int)
+
+    if is_vercel():
+        sync_from_blob(force=True)
+    db.session.expire_all()
 
     query = User.query
 
@@ -394,6 +398,9 @@ def reset_permissions_to_default(user_id):
 @superadmin_required
 def get_user_permissions(user_id):
     """API endpoint to fetch a user's current permissions JSON for dynamic UI modal loading."""
+    if is_vercel():
+        sync_from_blob(force=True)
+    db.session.expire_all()
     target_user = User.query.get_or_404(user_id)
     return jsonify({
         'status': 'success',
