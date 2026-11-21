@@ -36,6 +36,7 @@ def index():
 
     if is_vercel():
         sync_from_blob(force=True)
+    db.session.remove()
     db.session.expire_all()
 
     query = User.query
@@ -400,6 +401,7 @@ def get_user_permissions(user_id):
     """API endpoint to fetch a user's current permissions JSON for dynamic UI modal loading."""
     if is_vercel():
         sync_from_blob(force=True)
+    db.session.remove()
     db.session.expire_all()
     target_user = User.query.get_or_404(user_id)
     return jsonify({

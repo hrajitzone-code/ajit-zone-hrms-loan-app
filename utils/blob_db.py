@@ -67,7 +67,7 @@ def sync_from_blob(force=False):
 
         # Check if local DB is missing, remote has a newer version, or remote size differs
         needs_download = False
-        if not os.path.exists(LOCAL_TMP_DB) or os.path.getsize(LOCAL_TMP_DB) == 0:
+        if force or not os.path.exists(LOCAL_TMP_DB) or os.path.getsize(LOCAL_TMP_DB) == 0:
             needs_download = True
         elif _cached_uploaded_at != remote_uploaded_at or (remote_size > 0 and os.path.getsize(LOCAL_TMP_DB) != remote_size):
             needs_download = True
@@ -144,6 +144,7 @@ def sync_to_blob(source_path=None):
             'Authorization': f'Bearer {token}',
             'x-add-random-suffix': 'false',
             'x-vercel-blob-access': 'private',
+            'x-cache-control-max-age': '0',
             'Content-Type': 'application/x-sqlite3'
         }, method='PUT')
 

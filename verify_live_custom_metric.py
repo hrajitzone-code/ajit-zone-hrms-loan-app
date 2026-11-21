@@ -4,6 +4,7 @@ import http.cookiejar
 import re
 import json
 import ssl
+import time
 
 BASE_URL = "https://ajit-zone-hrms-loan-app.vercel.app"
 
@@ -95,6 +96,8 @@ def main():
         print(f"    - Success Banner in response: {success_in_flash}")
         print(f"    - Badge 'Custom Matrix & Metric Configured' displayed: {badge_configured}")
 
+    time.sleep(1.2)
+
     # Step 5: REFRESH PAGE & VERIFY PERSISTENCE ACROSS SESSIONS / CONTAINERS
     print("\n--- TEST FLOW 2: REFRESH & PERSISTENCE VERIFICATION ---")
     req_refresh = urllib.request.Request(f"{BASE_URL}/users/{target_user_id}/permissions/json", headers={
@@ -133,6 +136,8 @@ def main():
         print(f"    - Server response: {edit_json}")
         assert edit_json.get('success') is True, "Edit must return success: True"
 
+    time.sleep(1.0)
+
     # Step 7: VERIFY EDITED METRIC IN CLOUD DATABASE
     req_verify_edit = urllib.request.Request(f"{BASE_URL}/users/{target_user_id}/permissions/json", headers={
         'User-Agent': 'Mozilla/5.0'
@@ -163,6 +168,8 @@ def main():
         badge_default = "Standard Manager Defaults" in reset_html
         print(f"    - Reset flash message: {reset_flash}")
         print(f"    - Badge returned to standard defaults: {badge_default}")
+
+    time.sleep(1.0)
 
     # Step 9: VERIFY FINAL RESET IN DATABASE
     req_final = urllib.request.Request(f"{BASE_URL}/users/{target_user_id}/permissions/json", headers={
