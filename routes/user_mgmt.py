@@ -307,6 +307,9 @@ def update_permissions(user_id):
     Save custom module-wise permissions matrix for an individual user.
     Supports both standard form submission and AJAX JSON payload.
     """
+    if is_vercel():
+        sync_from_blob(force=True)
+    db.session.remove()
     target_user = User.query.get_or_404(user_id)
 
     # If primary superadmin, inform that they automatically retain 100% full access
@@ -364,6 +367,9 @@ def update_permissions(user_id):
 @superadmin_required
 def reset_permissions_to_default(user_id):
     """Reset custom permissions back to standard role defaults."""
+    if is_vercel():
+        sync_from_blob(force=True)
+    db.session.remove()
     target_user = User.query.get_or_404(user_id)
 
     target_user.permissions = None

@@ -147,7 +147,8 @@ def create_app(config_class=Config):
         from utils.blob_db import sync_from_blob, is_vercel
         if is_vercel():
             try:
-                sync_from_blob()
+                is_mutation = request.method in ['POST', 'PUT', 'DELETE', 'PATCH']
+                sync_from_blob(force=is_mutation)
             except Exception as e:
                 print(f"[BLOB BEFORE-REQUEST SYNC ERROR] {e}", flush=True)
 
