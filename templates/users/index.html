@@ -992,12 +992,14 @@ document.addEventListener('DOMContentLoaded', function() {
     // Modal forms submission visual indicator
     document.querySelectorAll('form[id^="userPermForm"]').forEach(form => {
         form.addEventListener('submit', function() {
-            const saveBtn = form.querySelector('button[type="submit"][id^="saveCustomMetricBtn"]') || 
-                            document.querySelector(`button[type="submit"][form="${form.id}"]`);
-            if (saveBtn) {
-                saveBtn.disabled = true;
-                saveBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin me-1"></i>Saving Custom Metric...';
-            }
+            setTimeout(() => {
+                const saveBtn = form.querySelector('button[type="submit"][id^="saveCustomMetricBtn"]') || 
+                                document.querySelector(`button[type="submit"][form="${form.id}"]`);
+                if (saveBtn) {
+                    saveBtn.disabled = true;
+                    saveBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin me-1"></i>Saving Custom Metric...';
+                }
+            }, 10);
         });
     });
 });

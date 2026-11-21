@@ -4,6 +4,7 @@ from routes.auth import login_required, role_required, permission_required
 from utils.emi_calculator import calculate_emi_schedule, validate_loan_eligibility
 from utils.pdf_builder import generate_emi_schedule_pdf
 from utils.google_sheets_sync import trigger_auto_sync_if_enabled
+from utils.blob_db import sync_to_blob, sync_from_blob, is_vercel
 from datetime import datetime, date
 import os
 
