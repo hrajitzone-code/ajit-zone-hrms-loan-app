@@ -43,6 +43,8 @@ def generate_next_loan_id():
 @login_required
 @permission_required('loans', 'view')
 def index():
+    if is_vercel():
+        sync_from_blob(force=request.args.get('refresh') == '1')
     status_filter = request.args.get('status', '').strip()
     workflow_filter = request.args.get('workflow', '').strip()
     search_q = request.args.get('q', '').strip()
