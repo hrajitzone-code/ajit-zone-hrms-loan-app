@@ -382,7 +382,13 @@ def lookup_employee(emp_code):
     """
     emp = Employee.query.filter_by(emp_id=emp_code.strip()).first()
     if not emp:
-        return jsonify({'success': False, 'message': 'Employee not found'}), 404
+        from utils.blob_db import sync_from_blob, is_vercel
+        if is_vercel():
+            sync_from_blob(force=True)
+            emp = Employee.query.filter_by(emp_id=emp_code.strip()).first()
+
+    if not emp:
+        return jsonify({'success': False, 'message': 'Employee not found'}), 200
 
     # Security check: If user cannot view all employees, verify they are authorized or querying their own record
     if not g.user.can_view_all('employees'):

@@ -40,11 +40,14 @@ def sync_from_blob(force=False):
     _last_check_time = now
 
     try:
-        # 1. Fetch current blob info
-        req = urllib.request.Request(BLOB_LIST_URL, headers={
-            'Authorization': f'Bearer {token}'
+        # 1. Fetch current blob info with cache-busting
+        list_url = f"{BLOB_LIST_URL}&_cb={int(now * 1000)}"
+        req = urllib.request.Request(list_url, headers={
+            'Authorization': f'Bearer {token}',
+            'Cache-Control': 'no-cache, no-store, must-revalidate',
+            'Pragma': 'no-cache'
         })
-        with urllib.request.urlopen(req, timeout=3.0) as resp:
+        with urllib.request.urlopen(req, timeout=4.0) as resp:
             data = json.loads(resp.read().decode('utf-8'))
 
         blobs = data.get('blobs', [])
@@ -59,21 +62,25 @@ def sync_from_blob(force=False):
         blob_info = blobs[0]
         remote_url = blob_info.get('url')
         remote_uploaded_at = blob_info.get('uploadedAt')
+        remote_size = blob_info.get('size', 0)
         _cached_download_url = remote_url
 
-        # Check if local DB is missing or remote has a newer version
+        # Check if local DB is missing, remote has a newer version, or remote size differs
         needs_download = False
         if not os.path.exists(LOCAL_TMP_DB) or os.path.getsize(LOCAL_TMP_DB) == 0:
             needs_download = True
-        elif _cached_uploaded_at != remote_uploaded_at:
+        elif _cached_uploaded_at != remote_uploaded_at or (remote_size > 0 and os.path.getsize(LOCAL_TMP_DB) != remote_size):
             needs_download = True
 
         if needs_download and remote_url:
-            print(f"[BLOB SYNC] Downloading updated database from {remote_url} (Version: {remote_uploaded_at})...", flush=True)
-            down_req = urllib.request.Request(remote_url, headers={
-                'Authorization': f'Bearer {token}'
+            print(f"[BLOB SYNC] Downloading updated database from {remote_url} (Version: {remote_uploaded_at}, Size: {remote_size})...", flush=True)
+            cache_bust_url = f"{remote_url}{'&' if '?' in remote_url else '?'}t={int(now * 1000)}"
+            down_req = urllib.request.Request(cache_bust_url, headers={
+                'Authorization': f'Bearer {token}',
+                'Cache-Control': 'no-cache, no-store, must-revalidate',
+                'Pragma': 'no-cache'
             })
-            with urllib.request.urlopen(down_req, timeout=5.0) as down_resp:
+            with urllib.request.urlopen(down_req, timeout=8.0) as down_resp:
                 content = down_resp.read()
 
             # Close and dispose active SQLAlchemy connections before replacing database file
@@ -140,10 +147,11 @@ def sync_to_blob(source_path=None):
             'Content-Type': 'application/x-sqlite3'
         }, method='PUT')
 
-        with urllib.request.urlopen(req, timeout=6.0) as resp:
+        with urllib.request.urlopen(req, timeout=8.0) as resp:
             result = json.loads(resp.read().decode('utf-8'))
             _cached_download_url = result.get('url')
             _cached_uploaded_at = result.get('uploadedAt')
+            _last_check_time = time.time()
             print(f"[BLOB SYNC] Successfully uploaded database to blob storage ({len(data)} bytes, version {_cached_uploaded_at})", flush=True)
             return True
 

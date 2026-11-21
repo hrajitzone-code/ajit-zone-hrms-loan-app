@@ -149,10 +149,13 @@ def create():
         )
         db.session.add(audit)
         db.session.commit()
+        from utils.blob_db import sync_to_blob, is_vercel
+        if is_vercel():
+            sync_to_blob()
         trigger_auto_sync_if_enabled()
 
         flash(f"Loan Application {loan_id_code} submitted successfully and under review!", 'success')
-        return redirect(url_for('loan.view_loan', loan_id=loan.id))
+        return redirect(url_for('loan.index'))
 
     next_loan_id = generate_next_loan_id()
     employees = Employee.query.filter_by(status='Active').all()
@@ -163,6 +166,7 @@ def create():
 
     return render_template('loans/create.html', next_loan_id=next_loan_id, employees=employees, default_emp_id=default_emp_id, today_date=date.today().strftime('%Y-%m-%d'))
 
+@loan_bp.route('/loans/<loan_id>')
 @loan_bp.route('/loans/<int:loan_id>')
 @login_required
 @permission_required('loans', 'view')
@@ -170,7 +174,33 @@ def view_loan(loan_id):
     from utils.blob_db import sync_from_blob, is_vercel
     if is_vercel():
         sync_from_blob()
-    loan = Loan.query.get_or_404(loan_id)
+
+    # Support both integer primary key and string loan_id (e.g. 7 or 'LN-2026-0007')
+    loan = None
+    if str(loan_id).isdigit():
+        loan = Loan.query.get(int(loan_id))
+    if not loan:
+        loan = Loan.query.filter_by(loan_id=str(loan_id)).first()
+
+    # If not found on Vercel, force fresh sync from cloud blob with backoff retry
+    if not loan and is_vercel():
+        sync_from_blob(force=True)
+        if str(loan_id).isdigit():
+            loan = Loan.query.get(int(loan_id))
+        if not loan:
+            loan = Loan.query.filter_by(loan_id=str(loan_id)).first()
+        if not loan:
+            import time
+            time.sleep(0.35)
+            sync_from_blob(force=True)
+            if str(loan_id).isdigit():
+                loan = Loan.query.get(int(loan_id))
+            if not loan:
+                loan = Loan.query.filter_by(loan_id=str(loan_id)).first()
+
+    if not loan:
+        flash(f"Loan record #{loan_id} could not be located. Showing all loans.", 'warning')
+        return redirect(url_for('loan.index'))
     employee = loan.employee
 
     # Scope check: If user only has view_own, ensure they are viewing their own loan
@@ -258,6 +288,8 @@ def approve_loan(loan_id):
         )
         db.session.add(audit)
         db.session.commit()
+        if is_vercel():
+            sync_to_blob()
         trigger_auto_sync_if_enabled()
 
         flash(f"Loan {loan.loan_id} approved and EMI schedule generated successfully!", 'success')
@@ -281,6 +313,8 @@ def approve_loan(loan_id):
         )
         db.session.add(audit)
         db.session.commit()
+        if is_vercel():
+            sync_to_blob()
 
         flash(f"Loan application {loan.loan_id} rejected.", 'info')
 
@@ -364,6 +398,8 @@ def delete_loan(loan_id):
     )
     db.session.add(audit)
     db.session.commit()
+    if is_vercel():
+        sync_to_blob()
     trigger_auto_sync_if_enabled()
 
     flash(f"Loan entry {loan_code} for {emp_name} has been permanently deleted.", "success")
@@ -462,6 +498,8 @@ def bulk_delete_loans():
         deleted_codes.append(loan_code)
 
     db.session.commit()
+    if is_vercel():
+        sync_to_blob()
     trigger_auto_sync_if_enabled()
 
     if deleted_count > 0:
